@@ -1,0 +1,7 @@
+.vscode/
+*.xls
+*.xlsx
+*.xlsm
+Publish-PriceTags.cmd
+Install-PriceTagButton.ps1
+Install-PriceTagButton.cmd
