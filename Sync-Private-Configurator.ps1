@@ -2,10 +2,14 @@
 param(
     [string]$BrandId = "",
     [string]$ApiUrl = "https://westendpower-configurator-api.westendpower-nm.workers.dev",
-    [string]$ProductsFile = (Join-Path $PSScriptRoot "data\products.csv")
+     [string]$ProductsFile = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($ProductsFile)) {
+    $ProductsFile = Join-Path $PSScriptRoot "data\products.csv"
+}
 
 if ([string]::IsNullOrWhiteSpace($BrandId)) {
     if (-not (Test-Path -LiteralPath $ProductsFile)) {

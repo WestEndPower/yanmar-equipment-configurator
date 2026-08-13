@@ -1665,6 +1665,32 @@ function createQuoteNumber(brand){
 
   return `${brand}-${y}${m}${day}-${n}`;
 }
+
+function currentQuoteNumber(){
+  const key =
+    `${configuratorBrandId().toLowerCase()}CurrentQuoteNumber`;
+
+  let quoteNumber =
+    clean(sessionStorage.getItem(key));
+
+  if(!quoteNumber){
+    quoteNumber =
+      createQuoteNumber(configuratorBrandId());
+
+    sessionStorage.setItem(
+      key,
+      quoteNumber
+    );
+  }
+
+  return quoteNumber;
+}
+
+function clearCurrentQuoteNumber(){
+  sessionStorage.removeItem(
+    `${configuratorBrandId().toLowerCase()}CurrentQuoteNumber`
+  );
+}
     function isTrue(v){
   const s = clean(v).toUpperCase();
   return ['T','TRUE','YES','Y','1','X'].includes(s);
@@ -4640,6 +4666,8 @@ function resetDealerDiscountIfCartEmpty(){
 
 function clearAll(){
 
+  clearCurrentQuoteNumber();
+
   state.selectedTool = null;
   state.cart = [];
 
@@ -6097,6 +6125,8 @@ const quoteData = {
       document.body.classList.contains('dealer-mode'),
 
     brandId: configuratorBrandId(),
+
+    quoteNumber: currentQuoteNumber(),
 
     maximumPaymentDiscountPercent:
       Math.max(
@@ -8572,7 +8602,7 @@ async function printSalesSheet(dealerWorksheet = false){
     return;
   }
 
-  const quoteNumber = createQuoteNumber(configuratorBrandId());
+  const quoteNumber = currentQuoteNumber();
 
 const quoteDateValue = new Date();
 const quoteDate = quoteDateValue.toLocaleDateString();
@@ -12174,7 +12204,7 @@ async function sendQuoteLead(actionType){
     };
   }
 
-  const quoteNumber = createQuoteNumber(configuratorBrandId());
+  const quoteNumber = currentQuoteNumber();
 
   const payload = {
     quoteNumber: quoteNumber,
@@ -16187,6 +16217,36 @@ function downloadDealerSpikeWebpage(){
 /* ==========================
    Dealer Mode
 ========================== */
+
+function configuratorBrandId(){
+  const row = (state.tools || []).find(item =>
+    clean(item.BrandID)
+  );
+
+  return clean(row?.BrandID).toUpperCase() || 'BRAND';
+}
+
+function configuratorBrandName(){
+  const row = (state.tools || []).find(item =>
+    clean(item.BrandName) || clean(item.BrandID)
+  );
+
+  const explicit = clean(row?.BrandName);
+  const id = clean(row?.BrandID);
+
+  if(explicit) return explicit;
+
+  return id
+    ? id.toLowerCase().replace(
+        /(^|[\s_-])\w/g,
+        value => value.toUpperCase()
+      )
+    : 'Equipment';
+}
+
+function dealerSessionStorageKey(){
+  return `${configuratorBrandId().toLowerCase()}DealerSessionToken`;
+}
 
 function dealerMode(on){
 // Disable all GA4 tracking while dealer mode is active.

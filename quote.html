@@ -1428,6 +1428,7 @@ try{
 
 const documentState = {
   quoteNumber:
+    clean(savedDocument.quoteNumber) ||
     clean(storedDocument.quoteNumber) ||
     documentNumber(quoteBrandId),
 
@@ -1887,14 +1888,15 @@ function recalculatePaymentMethodAdjustment(){
     finance: 0
   };
 
-  const adjustmentSegments = [];
-
   activePayments().forEach(payment => {
     const actualClass =
       paymentClass(payment.methodKey);
 
-    actualByClass[actualClass] +=
+    const paymentAmount =
       money(payment.amount);
+
+    actualByClass[actualClass] +=
+      paymentAmount;
 
     const consumeOrder = [
       actualClass,
@@ -1906,7 +1908,7 @@ function recalculatePaymentMethodAdjustment(){
         array.indexOf(value) === index
     );
 
-    let amountLeft = money(payment.amount);
+    let amountLeft = paymentAmount;
 
     consumeOrder.forEach(plannedClass => {
       if(amountLeft <= 0) return;
@@ -1918,133 +1920,31 @@ function recalculatePaymentMethodAdjustment(){
         );
 
       const applied =
-        Math.min(amountLeft, available);
-
-      if(applied <= 0) return;
-
-      const rateDifference =
-        Math.max(
-          paymentDiscountRate(plannedClass) -
-          paymentDiscountRate(actualClass),
-          0
+        Math.min(
+          amountLeft,
+          available
         );
-
-      if(rateDifference > 0){
-        adjustmentSegments.push({
-          amount: applied,
-          rateDifference
-        });
-      }
 
       remainingPlan[plannedClass] -= applied;
       amountLeft -= applied;
     });
   });
 
-  let adjustmentBeforeTax = 0;
-
   visibleLines.forEach(line => {
-    const originalPaymentDiscount =
+    line.revisedPaymentDiscount =
       money(line.originalPaymentDiscount);
 
-    if(originalPaymentDiscount <= 0){
-      line.revisedPaymentDiscount = 0;
-      line.paymentMethodAdjustment = 0;
-      return;
-    }
-
-    const lineShare =
-      documentState.baseTotal > 0
-        ? money(line.originalFinalLineTotal) /
-          documentState.baseTotal
-        : 0;
-
-    const rawReduction =
-      adjustmentSegments.reduce(
-        (total,segment) =>
-          total +
-          segment.amount *
-          lineShare *
-          segment.rateDifference /
-          100,
-        0
-      );
-
-    let revisedPaymentDiscount =
-      originalPaymentDiscount;
-
-    if(rawReduction > 0.0001){
-      const remainingSavings =
-        Math.max(
-          originalPaymentDiscount - rawReduction,
-          0
-        );
-
-      revisedPaymentDiscount =
-        remainingSavings >= 10
-          ? Math.floor(
-              (remainingSavings + 0.000001) / 10
-            ) * 10
-          : 0;
-    }
-
-    revisedPaymentDiscount =
-      Math.min(
-        revisedPaymentDiscount,
-        originalPaymentDiscount
-      );
-
-    line.revisedPaymentDiscount =
-      revisedPaymentDiscount;
-
-    line.paymentMethodAdjustment =
-      Math.max(
-        originalPaymentDiscount -
-        revisedPaymentDiscount,
-        0
-      );
-
-    adjustmentBeforeTax +=
-      line.paymentMethodAdjustment;
+    line.paymentMethodAdjustment = 0;
   });
 
-  const preTaxTotal =
-    Math.max(
-      documentState.baseTotal -
-      money(savedTotals.salesTax),
-      0
-    );
-
-  const taxRate =
-    savedTotals.taxExempt
-      ? 0
-      : money(savedDocument.taxRate) > 0
-        ? money(savedDocument.taxRate)
-        : preTaxTotal > 0
-          ? money(savedTotals.salesTax) / preTaxTotal
-          : 0;
-
-  const roundedBeforeTax =
-    Math.round(adjustmentBeforeTax * 100) / 100;
-
-  const totalAdjustment =
-    Math.round(
-      roundedBeforeTax *
-      (1 + taxRate) *
-      100
-    ) / 100;
-
-  documentState.paymentAdjustmentBeforeTax =
-    roundedBeforeTax;
-
-  documentState.paymentTaxAdjustment =
-    Math.round(
-      (totalAdjustment - roundedBeforeTax) *
-      100
-    ) / 100;
-
-  documentState.priceAdjustment =
-    totalAdjustment;
+  /*
+    A recorded payment never changes the agreed
+    sales-order price. Card and financing fees are
+    dealer expenses shown only in dealer reporting.
+  */
+  documentState.paymentAdjustmentBeforeTax = 0;
+  documentState.paymentTaxAdjustment = 0;
+  documentState.priceAdjustment = 0;
 
   documentState.remainingPaymentPlan =
     remainingPlan;
