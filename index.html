@@ -4819,17 +4819,21 @@ batteryCodes.push(...discoveredBatteryIDs);
     clean(product.ProductType).toUpperCase()
   );
 
+/*
+  A product has package components whenever packages.csv contains an
+  active row whose ParentSKU matches the product SKU. Do not require the
+  product to be classified as KIT/PACKAGE; tractor configurations and
+  other complete equipment models can also contain included components.
+*/
 const packageRow =
-  isPackageProduct
-    ? packages.find(pkg =>
-        (
-          clean(pkg.Active) === '' ||
-          isTrue(pkg.Active)
-        ) &&
-        clean(pkg.ParentSKU) ===
-          clean(product.SKU)
-      )
-    : null;
+  packages.find(pkg =>
+    (
+      clean(pkg.Active) === '' ||
+      isTrue(pkg.Active)
+    ) &&
+    clean(pkg.ParentSKU) ===
+      clean(product.SKU)
+  ) || null;
 
     const packageBattery = packageRow
       ? batteries.find(battery =>
@@ -5425,8 +5429,10 @@ if($('stihl-bid-program-select')){
     
       $('stihl-search').addEventListener('input', renderTools);
 $('stihl-category').addEventListener('change', () => {
+  state.selectedSystemButton = '';
   state.selectedTool = null;
   $('stihl-tool-select').value = '';
+  updateSystemButtonVisibility();
   renderTools();
   renderToolDetails();
   renderAllOptions();
@@ -5455,8 +5461,10 @@ document.querySelectorAll('#stihl-power-buttons .stihl-series-btn').forEach(btn 
   });
 });
       
-document.querySelectorAll('#stihl-system-buttons .stihl-series-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
+if($('stihl-system-buttons')){
+  $('stihl-system-buttons').addEventListener('click', event => {
+    const btn = event.target.closest('.stihl-series-btn');
+    if(!btn) return;
 
     document.querySelectorAll('#stihl-system-buttons .stihl-series-btn')
       .forEach(b => b.classList.remove('active'));
@@ -5472,7 +5480,7 @@ document.querySelectorAll('#stihl-system-buttons .stihl-series-btn').forEach(btn
     renderAllOptions();
     renderKMARuntimeMatrix();
   });
-});
+}
       
 $('stihl-tool-select').addEventListener('change', selectTool);
       $('stihl-add-tool').addEventListener('click', addToolToQuote);
@@ -6471,11 +6479,38 @@ function renderCategories(){
 
     function renderPowerButtons(){
 
-  const powers = [
-    'Battery',
+  const preferredPowerOrder = [
+    'Diesel',
     'Gas',
-    'Electric'
+    'Electric',
+    'Battery'
   ];
+
+  const availablePowers = [
+    ...new Set(
+      state.tools
+        .map(tool => clean(tool.PowerType))
+        .filter(Boolean)
+    )
+  ];
+
+  const powers = availablePowers.sort((a, b) => {
+    const aIndex = preferredPowerOrder.findIndex(
+      power => power.toUpperCase() === a.toUpperCase()
+    );
+    const bIndex = preferredPowerOrder.findIndex(
+      power => power.toUpperCase() === b.toUpperCase()
+    );
+
+    if(aIndex !== -1 || bIndex !== -1){
+      return (
+        (aIndex === -1 ? preferredPowerOrder.length : aIndex) -
+        (bIndex === -1 ? preferredPowerOrder.length : bIndex)
+      );
+    }
+
+    return a.localeCompare(b);
+  });
 
   const hasCurrentPromotions =
     state.tools.some(tool =>
@@ -6518,29 +6553,68 @@ function renderCategories(){
 }
 
 function updateSystemButtonVisibility(){
-  const power = clean(state.selectedPowerButton);
-  const systemBox = $('stihl-system-buttons');
-
-  if(!systemBox) return;
-
-  if(power === 'Gas' || power === 'Electric'){
-    systemBox.style.display = 'none';
-    state.selectedSystemButton = '';
-  }else{
-    systemBox.style.display = 'flex';
-  }
+  renderSystemButtons();
 }    
     
     function renderSystemButtons(){
-  const systems = ['AS','AK','AP','AR'];
+  const systemBox = $('stihl-system-buttons');
+  if(!systemBox) return;
 
-  $('stihl-system-buttons').innerHTML =
-    `<button type="button" class="stihl-series-btn active" data-system="">All Systems</button>` +
-    systems.map(s => `
-      <button type="button" class="stihl-series-btn" data-system="${s}">
-        ${s}
+  const category = clean($('stihl-category')?.value);
+  const categoryKey = category.toUpperCase();
+
+  let preferredSeries = [];
+  let allLabel = '';
+  let filterField = 'Series';
+
+  if(categoryKey.includes('COMPACT TRACTOR')){
+    preferredSeries = ['SA','YT','YM','SM'];
+    allLabel = 'All Compact Tractors';
+    filterField = 'System';
+  }else if(categoryKey.includes('UTV')){
+    preferredSeries = ['Bull','LongHorn','Brahma'];
+    allLabel = 'All UTVs';
+  }
+
+  if(!preferredSeries.length){
+    systemBox.style.display = 'none';
+    state.selectedSystemButton = '';
+    systemBox.innerHTML = '';
+    return;
+  }
+
+  const availableSeries = new Set(
+    state.tools
+      .filter(tool => clean(tool.Category).toUpperCase() === categoryKey)
+      .map(tool => clean(tool[filterField]).toUpperCase())
+      .filter(Boolean)
+  );
+
+  const series = preferredSeries.filter(item =>
+    availableSeries.has(item.toUpperCase())
+  );
+
+  if(
+    state.selectedSystemButton &&
+    !series.some(item =>
+      item.toUpperCase() === state.selectedSystemButton.toUpperCase()
+    )
+  ){
+    state.selectedSystemButton = '';
+  }
+
+  systemBox.innerHTML =
+    `<button type="button" class="stihl-series-btn ${state.selectedSystemButton ? '' : 'active'}" data-system="">${allLabel}</button>` +
+    series.map(item => `
+      <button
+        type="button"
+        class="stihl-series-btn ${state.selectedSystemButton.toUpperCase() === item.toUpperCase() ? 'active' : ''}"
+        data-system="${escapeHtml(item)}">
+        ${escapeHtml(item)}
       </button>
     `).join('');
+
+  systemBox.style.display = 'flex';
 }
     function toolSearchText(t){
       return [skuOf(t), clean(t.StihlID), clean(t.Model), nameOf(t), clean(t.Category), clean(t.SubCategory), clean(t.Series), clean(t.System), clean(t.Type), clean(t.Tags)].join(' ').toLowerCase();
@@ -6566,6 +6640,9 @@ function renderTools(){
     clean(
       state.selectedSystemButton
     );
+
+  const categoryUsesSystemFilter =
+    category.toUpperCase().includes('COMPACT TRACTOR');
 
   const list =
     state.tools.filter(tool => {
@@ -6596,7 +6673,11 @@ function renderTools(){
 
       if(
         system &&
-        clean(tool.System).toUpperCase() !==
+        clean(
+          categoryUsesSystemFilter
+            ? tool.System
+            : tool.Series
+        ).toUpperCase() !==
         system.toUpperCase()
       ){
         return false;
@@ -12685,11 +12766,12 @@ return 'See product notes';
   .filter(Boolean);
 }
 
-    function renderAllOptions(){
+function renderAllOptions(){
   renderBatteryOptions();
   renderChargerOptions();
   renderAttachmentOptions();
-  renderAccessoryOptions();
+  const accessoryCards = $('stihl-accessory-cards');
+  if(accessoryCards) accessoryCards.innerHTML = '';
   renderKMARuntimeMatrix();
 }
 
@@ -12739,17 +12821,101 @@ function compatibilityKey(v){
 }
 
 function selectedCompatibilityKeys(tool){
-  return [
-    tool?.StihlID
+  const directKeys = [
+    tool?.StihlID,
+    tool?.SKU,
+    tool?.Model,
+    tool?.Series,
+    tool?.CompatibilityGroup,
+    tool?.CompatibilityGroups
+  ];
+
+  const groupKeys = [
+    tool?.Series,
+    tool?.CompatibilityGroup
   ]
+    .flatMap(value => clean(value).split(/[|,;]/))
+    .filter(Boolean)
+    .map(value => `GROUP_${value}`);
+
+  return [
+    ...directKeys,
+    ...groupKeys
+  ]
+  .flatMap(value => clean(value).split(/[|,;]/))
   .map(compatibilityKey)
   .filter(Boolean);
+}
+
+function packageComponentSKUs(tool){
+  const packageRow = tool?.PackageRow;
+  if(!packageRow) return new Set();
+
+  return new Set(
+    Object.keys(packageRow)
+      .filter(columnName => /SKU\d+$/i.test(columnName))
+      .map(columnName => tightSku(packageRow[columnName]))
+      .filter(Boolean)
+  );
+}
+
+function compatibleModelKeys(item){
+  return [
+    item?.CompatibleModels,
+    item?.CompatibleModel,
+    item?.AppliesToModels,
+    item?.RequiredModel1,
+    item?.RequiredModel2
+  ]
+    .flatMap(value => clean(value).split(/[|,;]/))
+    .map(compatibilityKey)
+    .filter(Boolean);
+}
+
+function requiredBranchNumbers(item){
+  return Object.keys(item || {})
+    .map(columnName => {
+      const match = columnName.match(/^RequiredSKU(\d+)$/i);
+      return match ? Number(match[1]) : null;
+    })
+    .filter(number => Number.isInteger(number))
+    .sort((a, b) => a - b);
+}
+
+function hasNestedRequirementBranches(item){
+  return requiredBranchNumbers(item).some(branchNumber =>
+    Object.keys(item || {}).some(columnName =>
+      new RegExp(`^SKU${branchNumber}Requires\\d+$`, 'i').test(columnName) &&
+      clean(item[columnName])
+    )
+  );
 }
 
 function isCompatibleWithSelectedTool(item, tool){
   if(!item || !tool) return false;
 
   const selectedKeys = selectedCompatibilityKeys(tool);
+
+  const explicitModels = compatibleModelKeys(item);
+  if(explicitModels.some(model => selectedKeys.includes(model))){
+    return true;
+  }
+
+  const requiredSKUs = Object.keys(item)
+    .filter(columnName => /^RequiredSKU\d+$/i.test(columnName))
+    .map(columnName => tightSku(item[columnName]))
+    .filter(Boolean);
+
+  if(requiredSKUs.length){
+    const includedSKUs = packageComponentSKUs(tool);
+    const requirementsSatisfied = hasNestedRequirementBranches(item)
+      ? requiredSKUs.some(sku => includedSKUs.has(sku))
+      : requiredSKUs.every(sku => includedSKUs.has(sku));
+
+    if(requirementsSatisfied){
+      return true;
+    }
+  }
 
   return Object.keys(item).some(columnName =>
     selectedKeys.includes(compatibilityKey(columnName)) &&
@@ -12803,8 +12969,7 @@ function isCompatibleWithSelectedTool(item, tool){
         )
     );
 
-  const compatibleAttachments =
-  state.attachments
+  const compatibleAttachments = state.attachments
     .filter(attachment => {
 
       const runtimeCompatible =
@@ -12825,12 +12990,25 @@ function isCompatibleWithSelectedTool(item, tool){
     })
     .sort(sortByOrder);
 
+  const compatibleAccessories = state.accessories
+    .filter(accessory =>
+      skuOf(accessory) &&
+      (clean(accessory.Active) === '' || isTrue(accessory.Active)) &&
+      isCompatibleWithSelectedTool(accessory, tool)
+    )
+    .sort(sortByOrder);
+
+  const compatibleItems = [
+    ...compatibleAttachments.map(item => ({ type:'attachment', item })),
+    ...compatibleAccessories.map(item => ({ type:'accessory', item }))
+  ];
+
   select.innerHTML =
-    '<option value="">Choose compatible attachment</option>' +
-    compatibleAttachments
-      .map(attachment => `
-        <option value="${escapeHtml(skuOf(attachment))}">
-          ${escapeHtml(nameOf(attachment))} — ${fmtMoney(priceOf(attachment))}
+    '<option value="">Choose compatible accessory or attachment</option>' +
+    compatibleItems
+      .map(({type, item}) => `
+        <option value="${escapeHtml(type + '|' + skuOf(item))}">
+          ${escapeHtml(nameOf(item))} — ${fmtMoney(priceOf(item))}
         </option>
       `)
       .join('');
@@ -13063,10 +13241,10 @@ const rows = state.kmaRuntimes.filter(row =>
               <div class="stihl-accessory-actions">
                 <div>
                   <label class="stihl-qty-label"
-                         for="stihl-accessory-card-qty-${escapeHtml(stihlId)}">
+                         for="stihl-accessory-card-qty-${escapeHtml(sku)}">
                     Qty
                   </label>
-                  <input id="stihl-accessory-card-qty-${escapeHtml(stihlId)}"
+                  <input id="stihl-accessory-card-qty-${escapeHtml(sku)}"
                          class="stihl-qty"
                          type="number"
                          min="1"
@@ -13910,8 +14088,23 @@ function addAccessoryCardToQuote(sku, qty){
       let item, qty = 1;
       if(type === 'battery'){ item = findBattery($('stihl-battery-select').value); qty = Number($('stihl-battery-qty').value)||1; }
       if(type === 'charger'){ item = findCharger($('stihl-charger-select').value); qty = Number($('stihl-charger-qty').value)||1; }
-      if(type === 'attachment'){ item = state.attachments.find(a => skuOf(a) === clean($('stihl-attachment-select').value)); qty = Number($('stihl-attachment-qty').value)||1; }
-      if(type === 'accessory'){ item = state.accessories.find(a => skuOf(a) === clean($('stihl-accessory-select').value)); qty = Number($('stihl-accessory-qty').value)||1; }
+      if(type === 'attachment'){
+        const selectedValue = clean($('stihl-attachment-select').value);
+        const separator = selectedValue.indexOf('|');
+        const selectedType = separator >= 0 ? selectedValue.slice(0, separator) : 'attachment';
+        const selectedSKU = separator >= 0 ? selectedValue.slice(separator + 1) : selectedValue;
+
+        type = selectedType === 'accessory' ? 'accessory' : 'attachment';
+        item = type === 'accessory'
+          ? state.accessories.find(a => skuOf(a) === clean(selectedSKU))
+          : state.attachments.find(a => skuOf(a) === clean(selectedSKU));
+        qty = Number($('stihl-attachment-qty').value)||1;
+      }
+      if(type === 'accessory' && !item){
+        const accessorySelect = $('stihl-accessory-select');
+        item = state.accessories.find(a => skuOf(a) === clean(accessorySelect?.value));
+        qty = Number($('stihl-accessory-qty')?.value)||1;
+      }
       if(!item) return;
       addItem(type, item, qty, '');
       renderCart();
@@ -13958,42 +14151,74 @@ function addRequiredItems(parentItem, parentQty){
     return;
   }
 
-  /*
-    Automatically detect every RequiredSKU heading.
-    This supports RequiredSKU1, RequiredSKU2 and any
-    future numbered RequiredSKU columns.
-  */
-  const requiredNumbers =
-    Object.keys(parentItem)
-      .map(columnName => {
-        const match =
-          columnName.match(/^RequiredSKU(\d+)$/i);
+  const requiredNumbers = requiredBranchNumbers(parentItem);
+  const selectedPackageSKUs = packageComponentSKUs(state.selectedTool);
 
-        return match
-          ? Number(match[1])
-          : null;
-      })
-      .filter(number =>
-        Number.isInteger(number)
+  function isAlreadySelectedOrIncluded(sku){
+    const wanted = tightSku(sku);
+
+    return (
+      selectedPackageSKUs.has(wanted) ||
+      state.cart.some(line =>
+        tightSku(skuOf(line.item)) === wanted
       )
-      .sort((a, b) => a - b);
+    );
+  }
 
-  requiredNumbers.forEach(i => {
+  function addRequiredSKU(reqSku, reqQty, reason){
+    if(!reqSku || isAlreadySelectedOrIncluded(reqSku)){
+      return true;
+    }
+
+    const required = findRequiredItem(reqSku);
+
+    if(!required){
+      console.warn(
+        'Required item not found:',
+        reqSku,
+        'for',
+        nameOf(parentItem)
+      );
+      return false;
+    }
+
+    addItem(
+      required.type,
+      required.item,
+      (Number(reqQty) || 1) * (Number(parentQty) || 1),
+      reason || `Required for ${nameOf(parentItem)}`,
+      false,
+      true,
+      true,
+      skuOf(parentItem)
+    );
+
+    return true;
+  }
+
+  function branchMatchesSelectedTool(i){
+    const reqSku = clean(parentItem[`RequiredSKU${i}`]);
+    if(!reqSku) return false;
+
+    if(isAlreadySelectedOrIncluded(reqSku)){
+      return true;
+    }
+
+    const required = findRequiredItem(reqSku);
+
+    return !!(
+      required &&
+      state.selectedTool &&
+      isCompatibleWithSelectedTool(required.item, state.selectedTool)
+    );
+  }
+
+  function modelRequirementMatches(i){
 
     const reqModel =
       clean(parentItem[`RequiredModel${i}`]);
 
-    const reqSku =
-      clean(parentItem[`RequiredSKU${i}`]);
-
-    const reqQty =
-      Number(
-        clean(parentItem[`RequiredQty${i}`])
-      ) || 1;
-
-    if(!reqSku){
-      return;
-    }
+    if(!reqModel) return true;
 
     /*
       A blank RequiredModel means the component is
@@ -14002,59 +14227,88 @@ function addRequiredItems(parentItem, parentQty){
       If RequiredModel contains a mower SKU, the
       requirement applies only to that mower.
     */
-    if(reqModel){
+    const allowedModels = reqModel
+      .split(/[|,;]/)
+      .map(value => tightSku(value))
+      .filter(Boolean);
 
-      const allowedModels =
-        reqModel
-          .split(/[|,;]/)
-          .map(value => tightSku(value))
-          .filter(Boolean);
+    const selectedValues = [
+      state.selectedTool?.Model,
+      state.selectedTool?.SKU,
+      state.selectedTool?.StihlID,
+      state.selectedTool?.['STIHL ID']
+    ]
+      .map(value => tightSku(value))
+      .filter(Boolean);
 
-      const selectedValues = [
-        state.selectedTool?.Model,
-        state.selectedTool?.SKU,
-        state.selectedTool?.StihlID,
-        state.selectedTool?.['STIHL ID']
-      ]
-        .map(value => tightSku(value))
-        .filter(Boolean);
+    return allowedModels.some(model =>
+      selectedValues.includes(model)
+    );
+  }
 
-      const matchesModel =
-        allowedModels.some(model =>
-          selectedValues.includes(model)
+  function addRequirementBranch(i){
+    if(!modelRequirementMatches(i)) return;
+
+    const reqSku = clean(parentItem[`RequiredSKU${i}`]);
+    if(!reqSku) return;
+
+    const reqQty = Number(
+      clean(
+        parentItem[`RequiredSKU${i}Qty`] ||
+        parentItem[`RequiredQty${i}`]
+      )
+    ) || 1;
+
+    addRequiredSKU(
+      reqSku,
+      reqQty,
+      `Required for ${nameOf(parentItem)}`
+    );
+
+    const nestedNumbers = Object.keys(parentItem)
+      .map(columnName => {
+        const match = columnName.match(
+          new RegExp(`^SKU${i}Requires(\\d+)$`, 'i')
         );
+        return match ? Number(match[1]) : null;
+      })
+      .filter(number => Number.isInteger(number))
+      .sort((a, b) => a - b);
 
-      if(!matchesModel){
-        return;
-      }
-    }
-
-    const required =
-      findRequiredItem(reqSku);
-
-    if(required){
-
-      addItem(
-        required.type,
-        required.item,
-        reqQty * (Number(parentQty) || 1),
-        `Required for ${nameOf(parentItem)}`,
-        false,
-        true,
-        true,
-        skuOf(parentItem)
+    nestedNumbers.forEach(nestedNumber => {
+      const nestedSku = clean(
+        parentItem[`SKU${i}Requires${nestedNumber}`]
       );
+      const nestedQty = Number(
+        clean(parentItem[`SKU${i}Requires${nestedNumber}Qty`])
+      ) || 1;
 
+      addRequiredSKU(
+        nestedSku,
+        nestedQty,
+        `Required with ${reqSku} for ${nameOf(parentItem)}`
+      );
+    });
+  }
+
+  if(hasNestedRequirementBranches(parentItem)){
+    const matchingBranch = requiredNumbers.find(branchMatchesSelectedTool);
+
+    if(Number.isInteger(matchingBranch)){
+      addRequirementBranch(matchingBranch);
     }else{
-
       console.warn(
-        'Required item not found:',
-        reqSku,
-        'for',
-        nameOf(parentItem)
+        'No compatible requirement branch found for',
+        nameOf(parentItem),
+        'and',
+        nameOf(state.selectedTool)
       );
     }
-  });
+
+    return;
+  }
+
+  requiredNumbers.forEach(addRequirementBranch);
 }
     
     function addItem(type,item,qty,note,included,skipRequired,requiredItem,parentSku){
@@ -14096,6 +14350,55 @@ function addRequiredItems(parentItem, parentQty){
   if(!skipRequired){
     addRequiredItems(item, qty);
   }
+}
+
+function replaceCartComponent(parentSku, currentSku, nextSku){
+  const wantedParent = tightSku(parentSku);
+  const wantedCurrent = tightSku(currentSku);
+  const wantedNext = tightSku(nextSku);
+
+  const lineIndex = state.cart.findIndex(line =>
+    line.requiredItem &&
+    tightSku(line.parentSku) === wantedParent &&
+    tightSku(skuOf(line.item)) === wantedCurrent
+  );
+
+  if(lineIndex < 0 || !wantedNext || wantedNext === wantedCurrent){
+    return;
+  }
+
+  const oldLine = state.cart[lineIndex];
+  const baseSku = clean(oldLine.replacementBaseSku) || skuOf(oldLine.item);
+  const nextItem = state.attachments.find(item =>
+    tightSku(skuOf(item)) === wantedNext
+  );
+
+  if(!nextItem){
+    console.warn('Replacement component not found:', nextSku);
+    return;
+  }
+
+  state.cart[lineIndex] = {
+    ...oldLine,
+    item: nextItem,
+    key:
+      'attachment|' +
+      skuOf(nextItem) +
+      '|' +
+      (oldLine.included ? 'included' : '') +
+      '|' +
+      clean(oldLine.parentSku),
+    note:
+      tightSku(skuOf(nextItem)) === tightSku(baseSku)
+        ? oldLine.originalReplacementNote || oldLine.note
+        : `Replaces standard ${baseSku}`,
+    replacementBaseSku: baseSku,
+    originalReplacementNote:
+      oldLine.originalReplacementNote || oldLine.note
+  };
+
+  renderDeliveryOptions();
+  renderCart();
 }
 
     function removeCart(key){
@@ -14768,11 +15071,59 @@ const packageFinalPrice =
     0
   );
 
-  const packageDisplayedSavings =
+const packageDisplayedSavings =
   packageFactorySaleSavings +
   packageCustomerRebate +
   packageManualDiscount +
   linePaymentDiscount;
+
+const replacementControls = childItems
+  .map(child => {
+    const baseSku = clean(child.replacementBaseSku) || skuOf(child.item);
+    const alternatives = state.attachments.filter(item =>
+      tightSku(item.ReplacementForSKU) === tightSku(baseSku)
+    );
+
+    if(!alternatives.length) return '';
+
+    const baseItem = state.attachments.find(item =>
+      tightSku(skuOf(item)) === tightSku(baseSku)
+    ) || child.item;
+
+    const choices = [baseItem, ...alternatives]
+      .filter((item, index, items) =>
+        items.findIndex(candidate =>
+          tightSku(skuOf(candidate)) === tightSku(skuOf(item))
+        ) === index
+      );
+
+    return `
+      <div style="margin-top:8px;padding:8px;border:1px solid #ddd;border-radius:8px;background:#fafafa;">
+        <label style="display:block;font-size:12px;font-weight:900;margin-bottom:5px;">
+          Bucket Size
+        </label>
+        <select
+          data-replace-component="${escapeHtml(clean(line.parentSku) || skuOf(line.item))}"
+          data-current-component="${escapeHtml(skuOf(child.item))}"
+          style="width:100%;">
+          ${choices.map(choice => `
+            <option
+              value="${escapeHtml(skuOf(choice))}"
+              ${tightSku(skuOf(choice)) === tightSku(skuOf(child.item)) ? 'selected' : ''}>
+              ${escapeHtml(nameOf(choice))}${child.included ? ' — Included' : ` — ${fmtMoney(priceOf(choice))}`}
+            </option>
+          `).join('')}
+        </select>
+        <div class="stihl-small" style="margin-top:4px;">
+          ${child.included
+            ? 'Standard package bucket may be replaced with another listed size.'
+            : 'Changing the bucket replaces the standard bucket and updates the package price.'}
+        </div>
+      </div>
+    `;
+  })
+  .filter(Boolean)
+  .join('');
 
       const includedTooltip =
   childItems.length ||
@@ -14818,6 +15169,17 @@ const packageFinalPrice =
                       : ''}
                   </div>
                 `).join('')}
+
+                ${replacementControls ? `
+                  <div style="
+                    margin-top:9px;
+                    padding-top:9px;
+                    border-top:1px solid rgba(255,255,255,.35);
+                    color:#111;
+                  ">
+                    ${replacementControls}
+                  </div>
+                ` : ''}
 
                 ${isTrue(line.item.AssemblyOption) ? `
                   <div style="
@@ -15155,6 +15517,16 @@ renderCart();
       }
 
       renderCart();
+    });
+  });
+
+  lines.querySelectorAll('[data-replace-component]').forEach(select => {
+    select.addEventListener('change', () => {
+      replaceCartComponent(
+        select.getAttribute('data-replace-component'),
+        select.getAttribute('data-current-component'),
+        select.value
+      );
     });
   });
 
