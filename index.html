@@ -923,13 +923,20 @@ body.dealer-mode .dealer-only{
 ">
   <div class="stihl-line" style="font-weight:900;">
     <span>Remaining Balance After Cash / Credit</span>
-    <strong id="stihl-payment-remaining-balance">$0.00</strong>
+    <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;">
+      <label style="display:flex;align-items:center;gap:5px;margin:0;font-size:12px;white-space:nowrap;">
+        <input id="stihl-finance-remaining-payment"
+               type="checkbox"
+               style="width:auto;margin:0;">
+        Finance Remaining Balance
+      </label>
+      <strong id="stihl-payment-remaining-balance">$0.00</strong>
+    </div>
   </div>
 </div>
 
-  <div style="margin-top:12px;display:grid;grid-template-columns:minmax(150px,220px) minmax(240px,1fr);gap:12px;align-items:end;">
-    <div>
-      <label for="stihl-customer-credit-score" style="font-weight:900;">
+  <div style="margin-top:12px;display:grid;grid-template-columns:190px minmax(0,1fr);gap:10px;align-items:center;">
+      <label for="stihl-customer-credit-score" style="font-weight:900;margin:0;">
         Customer Credit Score
       </label>
       <input
@@ -940,33 +947,20 @@ body.dealer-mode .dealer-only{
         step="1"
         inputmode="numeric"
         placeholder="Blank = all">
-    </div>
+  </div>
 
-    <div id="stihl-financing-in-lieu-wrap" style="display:none;">
-      <label for="stihl-financing-in-lieu-select" style="color:var(--stihl-orange);font-weight:900;">
+  <div id="stihl-financing-in-lieu-wrap" style="margin-top:10px;display:none;grid-template-columns:190px minmax(0,1fr);gap:10px;align-items:center;">
+      <label for="stihl-financing-in-lieu-select" style="color:var(--stihl-orange);font-weight:900;margin:0;">
         Low-Rate Financing In Lieu of Rebate
       </label>
       <select id="stihl-financing-in-lieu-select">
         <option value="">Select Low-Rate Program</option>
       </select>
-    </div>
-  </div>
-
-  <div id="stihl-zero-percent-highlight" class="stihl-note" style="display:none;margin-top:8px;font-weight:900;color:#1f7a3a;"></div>
-
-  <div class="stihl-small" style="margin-top:5px;color:#b00020;font-weight:800;">
-    Selecting a low-rate program removes the factory rebate from the quote.
   </div>
 
   <div style="margin-top:12px;">
     <label for="stihl-financing-select" style="color:var(--stihl-orange);font-weight:900;">
       Financing Options Compatible With Rebate
-    </label>
-    <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:800;margin-bottom:6px;">
-      <input id="stihl-finance-remaining-payment"
-             type="checkbox"
-             style="width:auto;">
-      Finance Remaining Balance
     </label>
     <select id="stihl-financing-select">
       <option value="">Select Financing Program</option>
@@ -978,7 +972,7 @@ body.dealer-mode .dealer-only{
   </div>
 
   <div id="stihl-finance-summary" style="display:none;margin-top:12px;">
-    <div class="stihl-line">
+    <div class="stihl-line" id="stihl-minimum-down-row" style="display:none;">
       <span>Minimum Down Payment</span>
       <strong id="stihl-minimum-down-display">$0.00</strong>
     </div>
@@ -12462,7 +12456,6 @@ function renderFinancingOptions(){
   const select = $('stihl-financing-select');
   const inLieuSelect = $('stihl-financing-in-lieu-select');
   const inLieuWrap = $('stihl-financing-in-lieu-wrap');
-  const zeroPercentHighlight = $('stihl-zero-percent-highlight');
 
   if(!select){
     return;
@@ -12488,22 +12481,6 @@ function renderFinancingOptions(){
   const inLieuPrograms = programs.filter(p =>
     clean(p.RebateEligible) !== '' && !isTrue(p.RebateEligible)
   );
-
-  const longestZeroDownProgram = inLieuPrograms
-    .filter(p =>
-      money(p.APR) === 0 &&
-      minimumDownForProgram(p, total) <= 0
-    )
-    .sort((a,b) =>
-      Number(clean(b.TermMonths)) - Number(clean(a.TermMonths))
-    )[0] || null;
-
-  if(zeroPercentHighlight){
-    zeroPercentHighlight.style.display = longestZeroDownProgram ? '' : 'none';
-    zeroPercentHighlight.textContent = longestZeroDownProgram
-      ? `0% APR for ${clean(longestZeroDownProgram.TermMonths)} months with no down payment required.`
-      : '';
-  }
 
   const optionHtml = p => {
     const id =
@@ -12564,11 +12541,6 @@ function renderFinancingOptions(){
       inLieuWrap.style.display = 'none';
     }
 
-    if(zeroPercentHighlight){
-      zeroPercentHighlight.style.display = 'none';
-      zeroPercentHighlight.textContent = '';
-    }
-
     return;
   }
 
@@ -12582,7 +12554,7 @@ function renderFinancingOptions(){
   if(inLieuSelect && inLieuWrap){
 
     if(inLieuPrograms.length){
-      inLieuWrap.style.display = '';
+      inLieuWrap.style.display = 'grid';
 
       inLieuSelect.innerHTML =
         '<option value="">Select Financing Program</option>' +
@@ -16163,6 +16135,11 @@ if($('stihl-principal-financed-display')){
 
 
 const financeSummary = $('stihl-finance-summary');
+const minimumDownRow = $('stihl-minimum-down-row');
+
+if(minimumDownRow){
+  minimumDownRow.style.display = 'none';
+}
 
 const totalBeforeFinanceCheck =
   currentQuoteTotal();
@@ -16251,6 +16228,10 @@ if(selectedProgram && selectedFinanceIsBelowMinimum(totalBeforeFinanceCheck)){
 
   const minimumDown =
     minimumDownForProgram(selectedProgram, totalBeforeFinance);
+
+  if(minimumDownRow){
+    minimumDownRow.style.display = minimumDown > 0 ? 'flex' : 'none';
+  }
 
   const requiredDown =
     Math.max(enteredDown, minimumDown);
