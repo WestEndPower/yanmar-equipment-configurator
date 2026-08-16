@@ -928,6 +928,23 @@ body.dealer-mode .dealer-only{
 </div>
 
   <div style="margin-top:12px;">
+    <label for="stihl-customer-credit-score" style="font-weight:900;">
+      Customer Credit Score
+    </label>
+    <input
+      id="stihl-customer-credit-score"
+      type="number"
+      min="300"
+      max="850"
+      step="1"
+      inputmode="numeric"
+      placeholder="Leave blank to show all eligible programs">
+    <div class="stihl-small" style="margin-top:5px;">
+      Entered score filters programs by their minimum and maximum credit score.
+    </div>
+  </div>
+
+  <div style="margin-top:12px;">
     <label for="stihl-financing-select" style="color:var(--stihl-orange);font-weight:900;">
   Financing
 </label>
@@ -5733,6 +5750,7 @@ $('stihl-customer-email').addEventListener('blur', () => {
   'stihl-credit-full-payment',
   'stihl-cash-full-payment',
   'stihl-finance-remaining-payment',
+  'stihl-customer-credit-score',
   'stihl-financing-select',
   'stihl-financing-in-lieu-select'
 ].forEach(id => {
@@ -12039,7 +12057,10 @@ function selectedProgramAllowsRebate(){
   const program = selectedCustomerFinanceProgram();
 
   if(!program){
-    return true;
+    return (
+      cashFullPaymentSelected() ||
+      creditFullPaymentSelected()
+    );
   }
 
   const value = clean(program.RebateEligible);
@@ -12201,6 +12222,23 @@ if(
 
   if(min && amount < min) return false;
   if(max && amount > max) return false;
+
+  const enteredCreditScore = Number(
+    clean($('stihl-customer-credit-score')?.value)
+  );
+
+  if(Number.isFinite(enteredCreditScore) && enteredCreditScore > 0){
+    const minimumCreditScore = money(program.CreditScoreMin);
+    const maximumCreditScore = money(program.CreditScoreMax);
+
+    if(minimumCreditScore > 0 && enteredCreditScore < minimumCreditScore){
+      return false;
+    }
+
+    if(maximumCreditScore > 0 && enteredCreditScore > maximumCreditScore){
+      return false;
+    }
+  }
 
   const activeBidFleet = bidFleetEngine();
   const activeProgramType = clean(activeBidFleet?.program?.ProgramType).toLowerCase();
@@ -15133,12 +15171,15 @@ const replacementControls = childItems
     const baseSku = clean(child.replacementBaseSku) || skuOf(child.item);
     const baseBucketMatch = tightSku(baseSku).match(/^BBUCKET\d+-(.+)$/);
     const alternatives = state.attachments.filter(item =>
-      tightSku(item.ReplacementForSKU) === tightSku(baseSku) ||
       (
-        baseBucketMatch &&
-        tightSku(skuOf(item)) !== tightSku(baseSku) &&
-        tightSku(skuOf(item)).match(/^BBUCKET\d+-(.+)$/)?.[1] === baseBucketMatch[1]
-      )
+        tightSku(item.ReplacementForSKU) === tightSku(baseSku) ||
+        (
+          baseBucketMatch &&
+          tightSku(skuOf(item)) !== tightSku(baseSku) &&
+          tightSku(skuOf(item)).match(/^BBUCKET\d+-(.+)$/)?.[1] === baseBucketMatch[1]
+        )
+      ) &&
+      isCompatibleWithSelectedTool(item, state.selectedTool)
     );
 
     if(!alternatives.length) return '';
