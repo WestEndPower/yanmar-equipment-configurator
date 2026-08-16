@@ -927,24 +927,22 @@ body.dealer-mode .dealer-only{
   </div>
 </div>
 
-  <div style="margin-top:12px;">
-    <label for="stihl-customer-credit-score" style="font-weight:900;">
-      Customer Credit Score
-    </label>
-    <input
-      id="stihl-customer-credit-score"
-      type="number"
-      min="300"
-      max="850"
-      step="1"
-      inputmode="numeric"
-      placeholder="Leave blank to show all eligible programs">
-    <div class="stihl-small" style="margin-top:5px;">
-      Entered score filters programs by their minimum and maximum credit score.
+  <div style="margin-top:12px;display:grid;grid-template-columns:minmax(150px,220px) minmax(240px,1fr);gap:12px;align-items:end;">
+    <div>
+      <label for="stihl-customer-credit-score" style="font-weight:900;">
+        Customer Credit Score
+      </label>
+      <input
+        id="stihl-customer-credit-score"
+        type="number"
+        min="300"
+        max="850"
+        step="1"
+        inputmode="numeric"
+        placeholder="Blank = all">
     </div>
-  </div>
 
-  <div style="margin-top:12px;">
+    <div>
     <label for="stihl-financing-select" style="color:var(--stihl-orange);font-weight:900;">
   Financing
 </label>
@@ -958,6 +956,11 @@ body.dealer-mode .dealer-only{
     <select id="stihl-financing-select">
       <option value="">Select Financing Program</option>
     </select>
+    </div>
+  </div>
+
+  <div class="stihl-small" style="margin-top:5px;">
+    Entered score filters programs by their minimum and maximum credit score.
   </div>
 
   <div id="stihl-financing-in-lieu-wrap" style="margin-top:12px;display:none;">
@@ -3757,8 +3760,13 @@ function salesmanBonusIsActive(item){
   const bonus = money(item.SalesmanBonus);
   if(bonus <= 0) return false;
 
-  const start = parsePromoDate(item.SalesmanBonusStartDate);
-  const end = parsePromoDate(item.SalesmanBonusEndDate);
+  let start = parsePromoDate(item.SalesmanBonusStartDate);
+  let end = parsePromoDate(item.SalesmanBonusEndDate);
+
+  /* Keep an accidentally reversed manufacturer date range usable. */
+  if(start && end && start > end){
+    [start, end] = [end, start];
+  }
 
   // Bonus with no dates is inactive
   if(!start && !end) return false;
@@ -11255,7 +11263,7 @@ function freightRuleMatchesGroup(rule, group){
 function freightApplyWhenMatches(rule, groupInfo){
   const applyWhen = freightKey(rule.ApplyWhen || 'AllSales');
 
-  if(applyWhen === 'ALLSALES'){
+  if(applyWhen === 'ALLSALES' || applyWhen === 'ALWAYS'){
     return true;
   }
 
@@ -11446,7 +11454,7 @@ function renderFreightDisplay(){
   const freight = freightSummary();
 
   const factoryTotal = freight.rows
-    .filter(r => freightKey(r.applyWhen) === 'ALLSALES')
+    .filter(r => ['ALLSALES', 'ALWAYS'].includes(freightKey(r.applyWhen)))
     .reduce((sum,r) => sum + r.amount, 0);
 
   const specialTotal = freight.rows
@@ -13048,12 +13056,18 @@ function isCompatibleWithSelectedTool(item, tool){
   const compatibleAttachments = state.attachments
     .filter(attachment => {
 
+      const includedPackageSKUs = packageComponentSKUs(tool);
+      const attachmentSKU = normalizedSKU(
+        attachment.SKU || attachment.StihlID
+      );
+
+      if(includedPackageSKUs.has(attachmentSKU)){
+        return false;
+      }
+
       const runtimeCompatible =
         compatibleAttachmentSKUs.has(
-          normalizedSKU(
-            attachment.SKU ||
-            attachment.StihlID
-          )
+          attachmentSKU
         );
 
       const headingCompatible =
