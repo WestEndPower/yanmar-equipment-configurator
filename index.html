@@ -15152,23 +15152,30 @@ const replacementControls = childItems
               <strong>Package Details</strong>
 
               <div style="margin-top:7px;">
-                <div>
-                  <strong>${escapeHtml(skuText)}</strong>
-                  ${escapeHtml(nameOf(line.item))}
-                  ${document.body.classList.contains('dealer-mode')
-                    ? ` — ${fmtMoney(lineTotal(line))}`
-                    : ''}
-                </div>
-
-                ${childItems.map(c => `
-                  <div style="margin-top:5px;">
-                    <strong>${escapeHtml(skuOf(c.item))}</strong>
-                    ${escapeHtml(nameOf(c.item))}
-                    ${document.body.classList.contains('dealer-mode')
-                      ? ` — ${c.included ? 'No Additional Charge' : fmtMoney(priceOf(c.item) * c.qty)}`
-                      : ''}
+                <div style="
+                  display:grid;
+                  grid-template-columns:minmax(0,1fr) auto;
+                  gap:6px 12px;
+                  align-items:start;
+                ">
+                  <div>
+                    <strong>${escapeHtml(skuText)}</strong>
+                    ${escapeHtml(nameOf(line.item))}
                   </div>
-                `).join('')}
+                  <strong style="text-align:right;white-space:nowrap;">
+                    ${line.included ? 'Included' : fmtMoney(lineTotal(line))}
+                  </strong>
+
+                  ${childItems.map(c => `
+                    <div>
+                      <strong>${escapeHtml(skuOf(c.item))}</strong>
+                      ${escapeHtml(nameOf(c.item))}
+                    </div>
+                    <strong style="text-align:right;white-space:nowrap;">
+                      ${c.included ? 'Included' : fmtMoney(priceOf(c.item) * c.qty)}
+                    </strong>
+                  `).join('')}
+                </div>
 
                 ${replacementControls ? `
                   <div style="
@@ -15215,75 +15222,6 @@ const replacementControls = childItems
                     `}
                   </div>
                 ` : ''}
-
-                <div style="
-  margin-top:10px;
-  padding-top:9px;
-  border-top:1px solid rgba(255,255,255,.35);
-">
-
-  <strong>Pricing Details</strong>
-
-  <div class="stihl-pricing-details-grid" style="
-  display:grid;
-  grid-template-columns:1fr auto;
-  gap:5px 12px;
-  margin-top:7px;
-">
-
-    <span>MSRP</span>
-    <span>${fmtMoney(packageMSRP)}</span>
-
-    ${packageFactorySaleSavings > 0 ? `
-      <span>Factory Sale</span>
-      <span style="color:#ffb48a;">
-        -${fmtMoney(packageFactorySaleSavings)}
-      </span>
-    ` : ''}
-
-    ${packageCustomerRebate > 0 ? `
-      <span>Manufacturer Rebate</span>
-      <span style="color:#ffb48a;">
-        -${fmtMoney(packageCustomerRebate)}
-      </span>
-    ` : ''}
-
-    ${packageManualDiscount > 0 ? `
-      <span>Dealer Line Discount</span>
-      <span style="color:#ffb48a;">
-        -${fmtMoney(packageManualDiscount)}
-      </span>
-    ` : ''}
-
-    ${linePaymentDiscount > 0 ? `
-      <span>Payment-Option Savings</span>
-      <span style="color:#ffb48a;">
-        -${fmtMoney(linePaymentDiscount)}
-      </span>
-    ` : ''}
-
-    ${setupAmount > 0 ? `
-      <span>Setup / Installation</span>
-      <span>${fmtMoney(setupAmount)}</span>
-    ` : ''}
-
-    <strong style="
-      border-top:1px solid rgba(255,255,255,.35);
-      padding-top:5px;
-    ">
-      Line Total
-    </strong>
-
-    <strong style="
-      border-top:1px solid rgba(255,255,255,.35);
-      padding-top:5px;
-      text-align:right;
-    ">
-      ${fmtMoney(packageFinalPrice)}
-    </strong>
-
-  </div>
-</div>
 
               </div>
             </div>
