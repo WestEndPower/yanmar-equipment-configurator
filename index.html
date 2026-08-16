@@ -4123,10 +4123,12 @@ function financeProgramFeeIsAllowed(program, tool){
       "dealer-mode"
     )
   ){
-    return publicFinanceProgramIsAllowed(
-      program,
-      tool
-    );
+    /*
+      The combined finance-programs export now carries
+      its own model/group eligibility flags. Do not make
+      display depend on the retired second eligibility tab.
+    */
+    return true;
   }
 
   const maximumAllowedFee =
@@ -5122,7 +5124,9 @@ Brand: clean(program.BrandID),
   Label: clean(program.ProgramName),
 
   ApplicationFee:
-    clean(program.CustomerOriginationFee),
+    clean(program.FinanceType).toUpperCase() === 'REVOLVING'
+      ? clean(program.CustomerOriginationFee)
+      : clean(program.UCCFilingFee),
 
   MinimumDownAmount:
     clean(program.MinDownAmount),
@@ -12198,15 +12202,26 @@ if(
   if(min && amount < min) return false;
   if(max && amount > max) return false;
 
+  const activeBidFleet = bidFleetEngine();
+  const activeProgramType = clean(activeBidFleet?.program?.ProgramType).toLowerCase();
+
+  if(activeBidFleet?.eligible === true){
+    if(activeProgramType === 'bid' && !isTrue(program.BidCompatible)) return false;
+    if(activeProgramType === 'fleet' && !isTrue(program.FleetCompatible)) return false;
+  }
+
   const sku = clean(tool.StihlID) || skuOf(tool);
   const model = clean(tool.Model);
-  const financingGroup = clean(tool.FinancingGroup);
-  const series = clean(tool.Series);
-  const category = clean(tool.Category);
-  const subCategory = clean(tool.SubCategory);
-
   const groupColumns =
   financeGroupColumnsForTool(tool);
+
+  const programFlag = columnName => {
+    const wanted = clean(columnName).toUpperCase();
+    const actual = Object.keys(program || {}).find(key =>
+      clean(key).toUpperCase() === wanted
+    );
+    return actual ? isTrue(program[actual]) : false;
+  };
 
   const programBrand =
   clean(
@@ -12221,23 +12236,39 @@ const toolBrand =
     tool.Brand
   ).toUpperCase();
 
-const brandWideProgram =
-  programBrand === '' ||
-  (
-    programBrand !== '' &&
-    toolBrand !== '' &&
-    programBrand === toolBrand
-  );
+  const brandMatches =
+    programBrand === '' ||
+    (toolBrand !== '' && programBrand === toolBrand);
 
-return (
-  brandWideProgram ||
-  isTrue(program.AllProducts) ||
-  groupColumns.some(column =>
-    isTrue(program[column])
-  ) ||
-  (sku && isTrue(program[sku])) ||
-  (model && isTrue(program[model]))
-);
+  if(!brandMatches) return false;
+
+  const equipmentMatches =
+    programFlag('AllProducts') ||
+    groupColumns.some(programFlag) ||
+    (sku && programFlag(sku)) ||
+    (model && programFlag(model));
+
+  if(!equipmentMatches) return false;
+
+  const requiredProfit = minimumProfitAmountTotal();
+  if(requiredProfit <= 0) return true;
+
+  const rebateCompatible = isTrue(program.RebateCompatible);
+  const subtotal = state.cart.reduce((sum, line) => sum + lineTotal(line), 0);
+  const customerRebate = rebateCompatible ? customerRebateAmount() : 0;
+  const dealerRebate = rebateCompatible ? dealerRebateAmount() : 0;
+  const sellingSubtotal = Math.max(
+    subtotal - westEndPowerDiscountAmount(subtotal) - customerRebate,
+    0
+  );
+  const projectedGrossProfit =
+    sellingSubtotal + dealerRebate - cartTrueDealerCostTotal();
+  const rawFee = money(program.DealerFeePercent);
+  const feePercent = rawFee > 0 && rawFee < 1 ? rawFee : rawFee / 100;
+  const projectedNetProfit =
+    projectedGrossProfit - (sellingSubtotal * feePercent);
+
+  return projectedNetProfit >= requiredProfit;
 }
     
      async function emailQuote(){
