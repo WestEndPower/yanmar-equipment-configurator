@@ -927,6 +927,20 @@ body.dealer-mode .dealer-only{
   </div>
 </div>
 
+  <div id="stihl-financing-in-lieu-wrap" style="margin-top:12px;display:none;">
+    <label for="stihl-financing-in-lieu-select">
+      Financing In Lieu of Rebate
+    </label>
+
+    <select id="stihl-financing-in-lieu-select">
+      <option value="">Select Financing Program</option>
+    </select>
+
+    <div class="stihl-small" style="margin-top:5px;color:#b00020;font-weight:800;">
+      Selecting one of these programs removes the factory rebate from the quote.
+    </div>
+  </div>
+
   <div style="margin-top:12px;display:grid;grid-template-columns:minmax(150px,220px) minmax(240px,1fr);gap:12px;align-items:end;">
     <div>
       <label for="stihl-customer-credit-score" style="font-weight:900;">
@@ -962,20 +976,6 @@ body.dealer-mode .dealer-only{
   <div class="stihl-small" style="margin-top:5px;">
     Entered score filters programs by their minimum and maximum credit score.
   </div>
-
-  <div id="stihl-financing-in-lieu-wrap" style="margin-top:12px;display:none;">
-  <label for="stihl-financing-in-lieu-select">
-    Financing In Lieu of Rebate
-  </label>
-
-  <select id="stihl-financing-in-lieu-select">
-    <option value="">Select Financing Program</option>
-  </select>
-
-  <div class="stihl-small" style="margin-top:5px;color:#b00020;font-weight:800;">
-    Selecting one of these programs removes the factory rebate from the quote.
-  </div>
-</div> 
 
   <div id="stihl-finance-summary" style="display:none;margin-top:12px;">
     <div class="stihl-line">
@@ -15311,17 +15311,6 @@ const replacementControls = childItems
                   `).join('')}
                 </div>
 
-                ${replacementControls ? `
-                  <div style="
-                    margin-top:9px;
-                    padding-top:9px;
-                    border-top:1px solid rgba(255,255,255,.35);
-                    color:#111;
-                  ">
-                    ${replacementControls}
-                  </div>
-                ` : ''}
-
                 ${isTrue(line.item.AssemblyOption) ? `
                   <div style="
                     margin-top:7px;
@@ -15509,6 +15498,12 @@ const replacementControls = childItems
   }
 
 </div>
+
+          ${replacementControls ? `
+            <div style="margin-top:8px;">
+              ${replacementControls}
+            </div>
+          ` : ''}
 
           ${document.body.classList.contains('dealer-mode') && !line.included ? `
             <div style="
