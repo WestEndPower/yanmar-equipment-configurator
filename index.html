@@ -753,7 +753,7 @@ body.dealer-mode .dealer-only{
         <section class="stihl-panel" id="stihl-options-panel">
           <h2>2. Add Additional Items</h2>
 
-          <div class="stihl-option-row">
+          <div class="stihl-option-row" style="display:none;">
             <div>
               <label for="stihl-battery-select">Battery Options</label>
               <select id="stihl-battery-select"><option value="">Choose battery</option></select>
@@ -765,7 +765,7 @@ body.dealer-mode .dealer-only{
             <button class="stihl-btn" id="stihl-add-battery" type="button">Add</button>
           </div>
 
-          <div class="stihl-option-row">
+          <div class="stihl-option-row" style="display:none;">
             <div>
               <label for="stihl-charger-select">Charger Options</label>
               <select id="stihl-charger-select"><option value="">Choose charger</option></select>
@@ -788,7 +788,7 @@ body.dealer-mode .dealer-only{
             </div>
             <button class="stihl-btn" id="stihl-add-attachment" type="button">Add</button>
           </div>
-<div id="stihl-kma-runtime-matrix"></div>
+<div id="stihl-kma-runtime-matrix" style="display:none !important;"></div>
           
           <div id="stihl-accessory-cards"></div>
 
@@ -927,20 +927,6 @@ body.dealer-mode .dealer-only{
   </div>
 </div>
 
-  <div id="stihl-financing-in-lieu-wrap" style="margin-top:12px;display:none;">
-    <label for="stihl-financing-in-lieu-select">
-      Financing In Lieu of Rebate
-    </label>
-
-    <select id="stihl-financing-in-lieu-select">
-      <option value="">Select Financing Program</option>
-    </select>
-
-    <div class="stihl-small" style="margin-top:5px;color:#b00020;font-weight:800;">
-      Selecting one of these programs removes the factory rebate from the quote.
-    </div>
-  </div>
-
   <div style="margin-top:12px;display:grid;grid-template-columns:minmax(150px,220px) minmax(240px,1fr);gap:12px;align-items:end;">
     <div>
       <label for="stihl-customer-credit-score" style="font-weight:900;">
@@ -956,21 +942,35 @@ body.dealer-mode .dealer-only{
         placeholder="Blank = all">
     </div>
 
-    <div>
-    <label for="stihl-financing-select" style="color:var(--stihl-orange);font-weight:900;">
-  Financing
-</label>
+    <div id="stihl-financing-in-lieu-wrap" style="display:none;">
+      <label for="stihl-financing-in-lieu-select" style="color:var(--stihl-orange);font-weight:900;">
+        Low-Rate Financing In Lieu of Rebate
+      </label>
+      <select id="stihl-financing-in-lieu-select">
+        <option value="">Select Low-Rate Program</option>
+      </select>
+    </div>
+  </div>
 
-<label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:800;margin-bottom:6px;">
-  <input id="stihl-finance-remaining-payment"
-         type="checkbox"
-         style="width:auto;">
-  Finance Remaining Balance
-</label>
+  <div id="stihl-zero-percent-highlight" class="stihl-note" style="display:none;margin-top:8px;font-weight:900;color:#1f7a3a;"></div>
+
+  <div class="stihl-small" style="margin-top:5px;color:#b00020;font-weight:800;">
+    Selecting a low-rate program removes the factory rebate from the quote.
+  </div>
+
+  <div style="margin-top:12px;">
+    <label for="stihl-financing-select" style="color:var(--stihl-orange);font-weight:900;">
+      Financing Options Compatible With Rebate
+    </label>
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:800;margin-bottom:6px;">
+      <input id="stihl-finance-remaining-payment"
+             type="checkbox"
+             style="width:auto;">
+      Finance Remaining Balance
+    </label>
     <select id="stihl-financing-select">
       <option value="">Select Financing Program</option>
     </select>
-    </div>
   </div>
 
   <div class="stihl-small" style="margin-top:5px;">
@@ -6932,21 +6932,6 @@ ${renderProductSpecs(t)}
 
 ${shouldShowBatteryInfo(t) ? renderWeightOptions(t) : ''}
 
-${shouldShowBatteryInfo(t) ? `
-  <div style="
-    display:flex;
-    justify-content:center;
-    margin:12px 0 4px;
-  ">
-    <button
-      class="stihl-btn secondary"
-      id="stihl-print-runtime"
-      type="button">
-      Print Runtime Chart
-    </button>
-  </div>
-` : ''}
-
 ${clean(t.SpecialText) && clean(t.SpecialText) !== '0'
   ? `<div class="stihl-note">${escapeHtml(clean(t.SpecialText))}</div>`
   : ''}
@@ -12477,6 +12462,7 @@ function renderFinancingOptions(){
   const select = $('stihl-financing-select');
   const inLieuSelect = $('stihl-financing-in-lieu-select');
   const inLieuWrap = $('stihl-financing-in-lieu-wrap');
+  const zeroPercentHighlight = $('stihl-zero-percent-highlight');
 
   if(!select){
     return;
@@ -12503,6 +12489,22 @@ function renderFinancingOptions(){
     clean(p.RebateEligible) !== '' && !isTrue(p.RebateEligible)
   );
 
+  const longestZeroDownProgram = inLieuPrograms
+    .filter(p =>
+      money(p.APR) === 0 &&
+      minimumDownForProgram(p, total) <= 0
+    )
+    .sort((a,b) =>
+      Number(clean(b.TermMonths)) - Number(clean(a.TermMonths))
+    )[0] || null;
+
+  if(zeroPercentHighlight){
+    zeroPercentHighlight.style.display = longestZeroDownProgram ? '' : 'none';
+    zeroPercentHighlight.textContent = longestZeroDownProgram
+      ? `0% APR for ${clean(longestZeroDownProgram.TermMonths)} months with no down payment required.`
+      : '';
+  }
+
   const optionHtml = p => {
     const id =
       clean(p.PaymentOptionID) ||
@@ -12521,9 +12523,19 @@ function renderFinancingOptions(){
         Number(clean(p.TermMonths))
       );
 
+    const scoreMin = money(p.CreditScoreMin);
+    const scoreMax = money(p.CreditScoreMax);
+    const scoreText = scoreMin > 0 && scoreMax > 0
+      ? ` • Score ${scoreMin}-${scoreMax}`
+      : scoreMin > 0
+        ? ` • Score ${scoreMin}+`
+        : scoreMax > 0
+          ? ` • Score up to ${scoreMax}`
+          : '';
+
     return `
       <option value="${escapeHtml(id)}">
-        ${money(p.APR)}% APR • ${clean(p.TermMonths)} mo • ${fmtMoney(monthly)}/mo
+        ${money(p.APR)}% APR • ${clean(p.TermMonths)} mo • ${fmtMoney(monthly)}/mo${scoreText}
       </option>
     `;
   };
@@ -12550,6 +12562,11 @@ function renderFinancingOptions(){
 
     if(inLieuWrap){
       inLieuWrap.style.display = 'none';
+    }
+
+    if(zeroPercentHighlight){
+      zeroPercentHighlight.style.display = 'none';
+      zeroPercentHighlight.textContent = '';
     }
 
     return;
@@ -12608,13 +12625,13 @@ function selectTool(){
   $('stihl-options-panel').style.display = state.selectedTool ? '' : '';
 
   $('stihl-battery-select').closest('.stihl-option-row').style.display =
-    hideBatteryInfo ? 'none' : '';
+    'none';
 
   $('stihl-charger-select').closest('.stihl-option-row').style.display =
-    hideBatteryInfo ? 'none' : '';
+    'none';
 
   $('stihl-kma-runtime-matrix').style.display =
-    hideBatteryInfo ? 'none' : '';
+    'none';
 
   $('stihl-attachment-select').closest('.stihl-option-row').style.display =
   state.selectedTool ? '' : 'none';
