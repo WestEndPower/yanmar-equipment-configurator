@@ -923,39 +923,42 @@ body.dealer-mode .dealer-only{
 ">
   <div class="stihl-line" style="font-weight:900;">
     <span>Remaining Balance After Cash / Credit</span>
-    <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;">
-      <label style="display:flex;align-items:center;gap:5px;margin:0;font-size:12px;white-space:nowrap;">
-        <input id="stihl-finance-remaining-payment"
-               type="checkbox"
-               style="width:auto;margin:0;">
-        Finance Remaining Balance
-      </label>
-      <strong id="stihl-payment-remaining-balance">$0.00</strong>
-    </div>
+    <strong id="stihl-payment-remaining-balance">$0.00</strong>
+  </div>
+  <div class="stihl-line" style="font-weight:900;">
+    <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:12px;white-space:nowrap;">
+      <input id="stihl-finance-remaining-payment"
+             type="checkbox"
+             style="width:auto;margin:0;">
+      Finance Remaining Balance
+    </label>
+    <strong id="stihl-finance-remaining-balance-display">$0.00</strong>
   </div>
 </div>
 
-  <div style="margin-top:12px;display:grid;grid-template-columns:190px minmax(0,1fr);gap:10px;align-items:center;">
-      <label for="stihl-customer-credit-score" style="font-weight:900;margin:0;">
-        Customer Credit Score
-      </label>
-      <input
-        id="stihl-customer-credit-score"
-        type="number"
-        min="300"
-        max="850"
-        step="1"
-        inputmode="numeric"
-        placeholder="Blank = all">
-  </div>
+  <div style="margin-top:12px;display:grid;grid-template-columns:minmax(150px,220px) minmax(240px,1fr);gap:12px;align-items:end;">
+    <div>
+      <label for="stihl-customer-credit-score" style="font-weight:900;">
+          Customer Credit Score
+        </label>
+        <input
+          id="stihl-customer-credit-score"
+          type="number"
+          min="300"
+          max="850"
+          step="1"
+          inputmode="numeric"
+          placeholder="Blank = all">
+    </div>
 
-  <div id="stihl-financing-in-lieu-wrap" style="margin-top:10px;display:none;grid-template-columns:190px minmax(0,1fr);gap:10px;align-items:center;">
+    <div id="stihl-financing-in-lieu-wrap" style="display:none;">
       <label for="stihl-financing-in-lieu-select" style="color:var(--stihl-orange);font-weight:900;margin:0;">
         Low-Rate Financing In Lieu of Rebate
       </label>
       <select id="stihl-financing-in-lieu-select">
         <option value="">Select Low-Rate Program</option>
       </select>
+    </div>
   </div>
 
   <div style="margin-top:12px;">
@@ -12554,7 +12557,7 @@ function renderFinancingOptions(){
   if(inLieuSelect && inLieuWrap){
 
     if(inLieuPrograms.length){
-      inLieuWrap.style.display = 'grid';
+      inLieuWrap.style.display = 'block';
 
       inLieuSelect.innerHTML =
         '<option value="">Select Financing Program</option>' +
@@ -15835,6 +15838,11 @@ if($('stihl-payment-remaining-balance')){
 
   $('stihl-payment-remaining-balance').textContent =
     fmtMoney(remainingBalance);
+
+  if($('stihl-finance-remaining-balance-display')){
+    $('stihl-finance-remaining-balance-display').textContent =
+      fmtMoney(remainingBalance);
+  }
 }
 
 const creditCardProcessingFee =
