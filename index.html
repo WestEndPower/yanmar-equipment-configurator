@@ -921,9 +921,9 @@ body.dealer-mode .dealer-only{
   border-radius:10px;
   background:#fff8ef;
 ">
-  <div class="stihl-line" style="font-weight:900;">
-    <span>Remaining Balance After Cash / Credit</span>
-    <strong id="stihl-payment-remaining-balance">$0.00</strong>
+  <div class="stihl-line" style="font-weight:900;flex-wrap:nowrap;white-space:nowrap;gap:6px;width:100%;">
+    <span style="min-width:0;font-size:clamp(8px,2.5vw,12px);">Remaining Balance After Cash / Credit</span>
+    <strong id="stihl-payment-remaining-balance" style="flex-shrink:0;font-size:12px;">$0.00</strong>
   </div>
   <div class="stihl-line" style="font-weight:900;">
     <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:12px;white-space:nowrap;">
@@ -932,7 +932,6 @@ body.dealer-mode .dealer-only{
              style="width:auto;margin:0;">
       Finance Remaining Balance
     </label>
-    <strong id="stihl-finance-remaining-balance-display">$0.00</strong>
   </div>
 </div>
 
@@ -10308,12 +10307,10 @@ const qrCodeURL =
 
           ${saleLine}
 
-          ${rebate > 0 ? `
-  <div class="tag-line">
-    <span>Factory Rebate</span>
-    <span>-${fmtMoney(rebate)}</span>
-  </div>
-` : ''}
+          <div class="tag-line">
+            <span>Factory Rebate</span>
+            <span>${rebate > 0 ? `-${fmtMoney(rebate)}` : fmtMoney(0)}</span>
+          </div>
 
           <div class="tag-line">
             <span>Payment Savings</span>
