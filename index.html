@@ -779,8 +779,10 @@ body.dealer-mode .dealer-only{
 
           <div class="stihl-option-row">
             <div>
-              <label for="stihl-attachment-select">Compatible Accessories & Attachments</label>
-              <select id="stihl-attachment-select"><option value="">Choose attachment</option></select>
+              <label for="stihl-attachment-select">Compatible Accessories</label>
+<select id="stihl-attachment-select">
+  <option value="">Choose compatible accessory</option>
+</select>
             </div>
             <div>
               <label for="stihl-attachment-qty" class="stihl-qty-label">Qty</label>
@@ -788,6 +790,26 @@ body.dealer-mode .dealer-only{
             </div>
             <button class="stihl-btn" id="stihl-add-attachment" type="button">Add</button>
           </div>
+
+          <div class="stihl-option-row">
+            <div>
+              <label for="stihl-attachment-category-select">Select Attachment Type</label>
+<select id="stihl-attachment-category-select">
+  <option value="">Choose attachment category</option>
+</select>
+
+<label for="stihl-tarter-select" style="margin-top:6px;">Compatible Attachments</label>
+<select id="stihl-tarter-select">
+  <option value="">Choose attachment category first</option>
+</select>
+            </div>
+            <div>
+              <label for="stihl-tarter-qty" class="stihl-qty-label">Qty</label>
+              <input id="stihl-tarter-qty" class="stihl-qty" type="number" min="0" value="1" />
+            </div>
+            <button class="stihl-btn" id="stihl-add-tarter" type="button">Add</button>
+          </div>
+
 <div id="stihl-kma-runtime-matrix" style="display:none !important;"></div>
           
           <div id="stihl-accessory-cards"></div>
@@ -5519,6 +5541,11 @@ $('stihl-tool-select').addEventListener('change', selectTool);
       $('stihl-add-battery').addEventListener('click', ()=> addSelected('battery'));
       $('stihl-add-charger').addEventListener('click', ()=> addSelected('charger'));
       $('stihl-add-attachment').addEventListener('click', ()=> addSelected('attachment'));
+      $('stihl-add-tarter').addEventListener('click', ()=> addSelected('tarter'));
+      $('stihl-attachment-category-select').addEventListener(
+  'change',
+  renderAttachmentOptions
+);
       // Accessories are now added from image cards rendered below.
 if($('stihl-dealer-print')){
   $('stihl-dealer-print').addEventListener('click', () => printSalesSheet(true));
@@ -6852,18 +6879,7 @@ ${imageOf(t) ? `
   ">
     Model: ${escapeHtml(clean(t.Model))}
   </span>
-
-  <span style="
-    background:#cc0000;
-    color:#111;
-    padding:4px 10px;
-    border-radius:999px;
-    font-size:12px;
-    font-weight:700;
-  ">
-    SKU #: ${escapeHtml(clean(t.StihlID) || skuOf(t))}
-  </span>
-
+  
 </div>
 
     <div class="stihl-price-row">
@@ -12606,7 +12622,10 @@ function selectTool(){
     'none';
 
   $('stihl-attachment-select').closest('.stihl-option-row').style.display =
-  state.selectedTool ? '' : 'none';
+    state.selectedTool ? '' : 'none';
+
+  $('stihl-tarter-select').closest('.stihl-option-row').style.display =
+    state.selectedTool ? '' : 'none';
 
   renderToolDetails();
   renderAllOptions();
@@ -13072,7 +13091,7 @@ const horsepowerMatch =
   if(horsepowerMatch === true){
     return true;
   }
-  
+
   const explicitModels = compatibleModelKeys(item);
   if(explicitModels.some(model => selectedKeys.includes(model))){
     return true;
@@ -13102,19 +13121,37 @@ const horsepowerMatch =
 
     function renderAttachmentOptions(){
 
-  const select =
+  const accessorySelect =
     $('stihl-attachment-select');
+
+  const categorySelect =
+    $('stihl-attachment-category-select');
+
+  const attachmentSelect =
+    $('stihl-tarter-select');
 
   const tool =
     state.selectedTool;
 
-  if(!select){
+  if(
+    !accessorySelect ||
+    !categorySelect ||
+    !attachmentSelect
+  ){
     return;
   }
 
   if(!tool){
-    select.innerHTML =
+
+    accessorySelect.innerHTML =
       '<option value="">Select a tool first</option>';
+
+    categorySelect.innerHTML =
+      '<option value="">Select a tool first</option>';
+
+    attachmentSelect.innerHTML =
+      '<option value="">Select a tool first</option>';
+
     return;
   }
 
@@ -13124,17 +13161,28 @@ const horsepowerMatch =
       .replace(/[^A-Z0-9]/g, '');
   }
 
+  function attachmentCategory(attachment){
+
+    return (
+      clean(attachment.SubCategory) ||
+      'Other Attachments'
+    );
+  }
+
   const selectedToolSKU =
     normalizedSKU(
       tool.StihlID ||
       tool.SKU
     );
 
-  const compatibleAttachmentSKUs =
+  const runtimeAttachmentSKUs =
     new Set(
       state.kmaRuntimes
         .filter(row =>
-          (clean(row.Active) === '' || isTrue(row.Active)) &&
+          (
+            clean(row.Active) === '' ||
+            isTrue(row.Active)
+          ) &&
           normalizedSKU(
             row.ToolSKU ||
             row.PowerheadSKU
@@ -13142,56 +13190,137 @@ const horsepowerMatch =
           clean(row.AttachmentSKU)
         )
         .map(row =>
-          normalizedSKU(row.AttachmentSKU)
+          normalizedSKU(
+            row.AttachmentSKU
+          )
         )
     );
 
-  const compatibleAttachments = state.attachments
-    .filter(attachment => {
+  const includedPackageSKUs =
+    packageComponentSKUs(tool);
 
-      const includedPackageSKUs = packageComponentSKUs(tool);
-      const attachmentSKU = normalizedSKU(
-        attachment.SKU || attachment.StihlID
-      );
+  const compatibleAttachments =
+    state.attachments
+      .filter(attachment => {
 
-      if(includedPackageSKUs.has(attachmentSKU)){
-        return false;
-      }
+        const attachmentSKU =
+          normalizedSKU(
+            attachment.SKU ||
+            attachment.StihlID
+          );
 
-      const runtimeCompatible =
-        compatibleAttachmentSKUs.has(
-          attachmentSKU
+        if(
+          includedPackageSKUs.has(
+            attachmentSKU
+          )
+        ){
+          return false;
+        }
+
+        const runtimeCompatible =
+          runtimeAttachmentSKUs.has(
+            attachmentSKU
+          );
+
+        const ruleCompatible =
+          isCompatibleWithSelectedTool(
+            attachment,
+            tool
+          );
+
+        return (
+          runtimeCompatible ||
+          ruleCompatible
         );
+      })
+      .sort(sortByOrder);
 
-      const headingCompatible =
+  const compatibleAccessories =
+    state.accessories
+      .filter(accessory =>
+        skuOf(accessory) &&
+        (
+          clean(accessory.Active) === '' ||
+          isTrue(accessory.Active)
+        ) &&
         isCompatibleWithSelectedTool(
-          attachment,
+          accessory,
           tool
-        );
+        )
+      )
+      .sort(sortByOrder);
 
-      return runtimeCompatible || headingCompatible;
-    })
-    .sort(sortByOrder);
+  accessorySelect.innerHTML =
+    '<option value="">Choose compatible accessory</option>' +
 
-  const compatibleAccessories = state.accessories
-    .filter(accessory =>
-      skuOf(accessory) &&
-      (clean(accessory.Active) === '' || isTrue(accessory.Active)) &&
-      isCompatibleWithSelectedTool(accessory, tool)
+    compatibleAccessories
+      .map(accessory => `
+        <option value="${escapeHtml(
+          'accessory|' + skuOf(accessory)
+        )}">
+          ${escapeHtml(nameOf(accessory))} —
+          ${fmtMoney(priceOf(accessory))}
+        </option>
+      `)
+      .join('');
+
+  const previousCategory =
+    clean(categorySelect.value);
+
+  const categories = [
+    ...new Set(
+      compatibleAttachments
+        .map(attachmentCategory)
+        .filter(Boolean)
     )
-    .sort(sortByOrder);
+  ].sort((a, b) =>
+    a.localeCompare(b)
+  );
 
-  const compatibleItems = [
-    ...compatibleAttachments.map(item => ({ type:'attachment', item })),
-    ...compatibleAccessories.map(item => ({ type:'accessory', item }))
-  ];
+  categorySelect.innerHTML =
+    '<option value="">Choose attachment category</option>' +
 
-  select.innerHTML =
-    '<option value="">Choose compatible accessory or attachment</option>' +
-    compatibleItems
-      .map(({type, item}) => `
-        <option value="${escapeHtml(type + '|' + skuOf(item))}">
-          ${escapeHtml(nameOf(item))} — ${fmtMoney(priceOf(item))}
+    categories
+      .map(category => `
+        <option value="${escapeHtml(category)}">
+          ${escapeHtml(category)}
+        </option>
+      `)
+      .join('');
+
+  if(categories.includes(previousCategory)){
+    categorySelect.value =
+      previousCategory;
+  }
+
+  const selectedCategory =
+    clean(categorySelect.value);
+
+  if(!selectedCategory){
+
+    attachmentSelect.innerHTML =
+      '<option value="">Choose attachment category first</option>';
+
+    return;
+  }
+
+  const categoryAttachments =
+    compatibleAttachments.filter(
+      attachment =>
+        attachmentCategory(attachment) ===
+        selectedCategory
+    );
+
+  attachmentSelect.innerHTML =
+    '<option value="">Choose compatible attachment</option>' +
+
+    categoryAttachments
+      .map(attachment => `
+        <option value="${escapeHtml(
+          skuOf(attachment)
+        )}">
+          ${escapeHtml(nameOf(attachment))} —
+          ${fmtMoney(priceOf(attachment))}
         </option>
       `)
       .join('');
@@ -14271,7 +14400,25 @@ function addAccessoryCardToQuote(sku, qty){
       let item, qty = 1;
       if(type === 'battery'){ item = findBattery($('stihl-battery-select').value); qty = Number($('stihl-battery-qty').value)||1; }
       if(type === 'charger'){ item = findCharger($('stihl-charger-select').value); qty = Number($('stihl-charger-qty').value)||1; }
-      if(type === 'attachment'){
+      if(type === 'tarter'){
+
+        item =
+          state.attachments.find(
+            attachment =>
+              skuOf(attachment) ===
+              clean(
+                $('stihl-tarter-select').value
+              )
+          );
+
+        qty =
+          Number(
+            $('stihl-tarter-qty').value
+          ) || 1;
+
+        type = 'attachment';
+      }
+      else if(type === 'attachment'){
         const selectedValue = clean($('stihl-attachment-select').value);
         const separator = selectedValue.indexOf('|');
         const selectedType = separator >= 0 ? selectedValue.slice(0, separator) : 'attachment';
