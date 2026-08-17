@@ -12964,11 +12964,115 @@ function hasNestedRequirementBranches(item){
   );
 }
 
+function numericHorsepower(value){
+  const match = clean(value)
+    .replace(/,/g, '')
+    .match(/-?\d+(?:\.\d+)?/);
+
+  return match ? Number(match[0]) : null;
+}
+
+function horsepowerCompatibilityMatches(item, tool){
+
+  const engineMin =
+    numericHorsepower(item.RequiredEngineHPMin);
+
+  const engineMax =
+    numericHorsepower(item.RequiredEngineHPMax);
+
+  const ptoMin =
+    numericHorsepower(item.RequiredPTOHPMin);
+
+  const ptoMax =
+    numericHorsepower(item.RequiredPTOHPMax);
+
+  const hasEngineRequirement =
+    engineMin !== null ||
+    engineMax !== null;
+
+  const hasPTORequirement =
+    ptoMin !== null ||
+    ptoMax !== null;
+
+  if(
+    !hasEngineRequirement &&
+    !hasPTORequirement
+  ){
+    return null;
+  }
+
+  const tractorEngineHP =
+    numericHorsepower(
+      tool.GrossEngineHP ||
+      tool.EngineHP
+    );
+
+  const tractorPTOHP =
+    numericHorsepower(
+      tool.PTOHP ||
+      tool.PTOPower
+    );
+
+  if(hasEngineRequirement){
+
+    if(tractorEngineHP === null){
+      return false;
+    }
+
+    if(
+      engineMin !== null &&
+      tractorEngineHP < engineMin
+    ){
+      return false;
+    }
+
+    if(
+      engineMax !== null &&
+      tractorEngineHP > engineMax
+    ){
+      return false;
+    }
+  }
+
+  if(hasPTORequirement){
+
+    if(tractorPTOHP === null){
+      return false;
+    }
+
+    if(
+      ptoMin !== null &&
+      tractorPTOHP < ptoMin
+    ){
+      return false;
+    }
+
+    if(
+      ptoMax !== null &&
+      tractorPTOHP > ptoMax
+    ){
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function isCompatibleWithSelectedTool(item, tool){
   if(!item || !tool) return false;
 
   const selectedKeys = selectedCompatibilityKeys(tool);
 
+const horsepowerMatch =
+    horsepowerCompatibilityMatches(
+      item,
+      tool
+    );
+
+  if(horsepowerMatch === true){
+    return true;
+  }
+  
   const explicitModels = compatibleModelKeys(item);
   if(explicitModels.some(model => selectedKeys.includes(model))){
     return true;
