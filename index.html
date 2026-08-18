@@ -15517,16 +15517,14 @@ const linePaymentDiscount =
 const packageFinalPrice =
   Math.max(
     packageTotal -
-    packageCustomerRebate -
-    linePaymentDiscount,
+    packageCustomerRebate,
     0
   );
 
 const packageDisplayedSavings =
   packageFactorySaleSavings +
   packageCustomerRebate +
-  packageManualDiscount +
-  linePaymentDiscount;
+  packageManualDiscount;
 
 const replacementControls = childItems
   .map(child => {
