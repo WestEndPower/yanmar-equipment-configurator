@@ -3970,6 +3970,90 @@ function financeGroupColumnsForTool(tool){
   return [...columns];
 }
 
+function financeBulletinGroupForTool(tool){
+  if(!tool) return '';
+
+  const explicit = clean(
+    tool.FinanceBulletinGroup || tool.FinancingGroup
+  ).toUpperCase();
+
+  if(['CUT','ZTR','UTV'].includes(explicit)) return explicit;
+
+  const category = clean(tool.Category).toUpperCase();
+  const system = clean(tool.System).toUpperCase();
+  const series = clean(tool.Series).toUpperCase();
+
+  if(
+    category.includes('COMPACT TRACTOR') ||
+    ['SA','YT','YM','SM'].includes(system) ||
+    /^(SA|YT|YM|SM)/.test(series)
+  ) return 'CUT';
+
+  if(
+    category.includes('ZERO-TURN') ||
+    category.includes('ZERO TURN') ||
+    /^(YZ|RZ|AZA|RZA)/.test(series)
+  ) return 'ZTR';
+
+  if(
+    category.includes('UTV') ||
+    ['BULL','LONGHORN','BRAHMA'].includes(system) ||
+    /^(BULL|LONGHORN|BRAHMA)/.test(series)
+  ) return 'UTV';
+
+  return '';
+}
+
+function financeProgramGroupMatches(program, tool){
+  const programGroup = clean(
+    program?.FinanceBulletinGroup
+  ).toUpperCase();
+
+  if(programGroup === 'ALL') return true;
+  if(!programGroup) return false;
+
+  return programGroup === financeBulletinGroupForTool(tool);
+}
+
+function compareFinancePrograms(a, b){
+  return (
+    money(a.APR) - money(b.APR) ||
+    Number(clean(a.TermMonths)) - Number(clean(b.TermMonths)) ||
+    money(a.MinDownAmount || a.MinimumDownAmount) -
+      money(b.MinDownAmount || b.MinimumDownAmount) ||
+    money(a.MinDownPercent || a.MinimumDownPercent) -
+      money(b.MinDownPercent || b.MinimumDownPercent) ||
+    money(a.DealerFeePercent) - money(b.DealerFeePercent) ||
+    money(a.SortOrder) - money(b.SortOrder)
+  );
+}
+
+function uniqueFinancePrograms(programs){
+  const seen = new Set();
+
+  return programs.filter(program => {
+    const key = [
+      clean(program.FinanceBulletinGroup).toUpperCase(),
+      money(program.APR),
+      Number(clean(program.TermMonths)),
+      money(program.MinDownAmount || program.MinimumDownAmount),
+      money(program.MinDownPercent || program.MinimumDownPercent),
+      money(program.DealerFeePercent),
+      money(program.CreditScoreMin),
+      money(program.CreditScoreMax),
+      money(program.MinAmount),
+      money(program.MaxAmount),
+      clean(program.RebateCompatible || program.RebateEligible).toUpperCase(),
+      clean(program.FinanceType).toUpperCase(),
+      money(program.ApplicationFee)
+    ].join('|');
+
+    if(seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function toolMaximumFinanceFeePercent(tool){
 
   if(!tool){
@@ -4287,16 +4371,13 @@ const activeRebate =
 })
 
     .filter(program =>
+      financeProgramGroupMatches(program, t) ||
       isTrue(program.AllProducts) ||
       groupColumns.some(column => isTrue(program[column])) ||
       (sku && isTrue(program[sku])) ||
       (model && isTrue(program[model]))
     )
-    .sort((a,b) =>
-      money(a.APR) - money(b.APR) ||
-      Number(clean(b.TermMonths)) -
-      Number(clean(a.TermMonths))
-    )[0] || null;
+    .sort(compareFinancePrograms)[0] || null;
 }
 
 function rebateToCustomerOf(item){
@@ -4386,7 +4467,13 @@ const savingsLabel =
     : 'Factory Sale';
 
   const basePrice = sale || msrp || 0;
-  const yourPrice = Math.max(basePrice - rebate, 0);
+
+/*
+  A factory rebate is payment-dependent.
+  Do not subtract it before payment selection.
+*/
+const priceAfterRebate = Math.max(basePrice - rebate, 0);
+const displayedPrice = basePrice;
 
   const finance = bestPromoFinanceForTool(item);
 const financeWorksWithRebate =
@@ -4406,7 +4493,7 @@ const offerJoiner =
   if(finance){
     const financePrice =
   financeWorksWithRebate
-    ? yourPrice
+    ? priceAfterRebate
     : basePrice;
 
 const principal =
@@ -4458,10 +4545,10 @@ const offerColumns =
 
         <div style="text-align:center;">
           <div style="font-size:12px;font-weight:900;color:#666;text-transform:uppercase;">
-            ${rebate > 0 ? 'Price After Rebate' : 'Your Price'}
+            Current Price
           </div>
           <div style="font-size:30px;font-weight:900;color:#c00000;">
-            ${fmtMoney(yourPrice)}
+            ${fmtMoney(displayedPrice)}
           </div>
         </div>
       </div>
@@ -5184,7 +5271,9 @@ Brand: clean(program.BrandID),
     clean(program.RebateCompatible),
 
   AllProducts:
-      clean(program.Group_ALL_STIHL)
+      clean(program.FinanceBulletinGroup).toUpperCase() === 'ALL'
+        ? 'T'
+        : clean(program.Group_ALL || program.Group_ALL_STIHL)
   };
 });
 
@@ -9786,7 +9875,7 @@ async function priceTagFinancePrograms(tool){
 
   if(clean(CONFIGURATOR_API) === ''){
 
-  return state.paymentOptions
+  return uniqueFinancePrograms(state.paymentOptions
     .filter(program =>
       clean(program.Public) === '' ||
       isTrue(program.Public)
@@ -9804,10 +9893,14 @@ async function priceTagFinancePrograms(tool){
         brand === configuratorBrandId()
       );
     })
-    .sort((a, b) =>
-      money(a.SortOrder) -
-      money(b.SortOrder)
-    );
+    .filter(program =>
+      financeProgramGroupMatches(program, tool) ||
+      isTrue(program.AllProducts) ||
+      financeGroupColumnsForTool(tool).some(column =>
+        isTrue(program[column])
+      )
+    )
+    .sort(compareFinancePrograms));
 }
 
   const response = await fetch(
@@ -9841,7 +9934,22 @@ async function priceTagFinancePrograms(tool){
     );
   }
 
-  return result.programs || [];
+  return uniqueFinancePrograms(
+    (result.programs || [])
+      .map(program => ({
+        ...program,
+        APR:
+          money(program.APR) > 0 && money(program.APR) < 1
+            ? Number((money(program.APR) * 100).toFixed(2))
+            : money(program.APR),
+        DealerFeePercent:
+          money(program.DealerFeePercent) > 0 &&
+          money(program.DealerFeePercent) < 1
+            ? Number((money(program.DealerFeePercent) * 100).toFixed(2))
+            : money(program.DealerFeePercent)
+      }))
+      .sort(compareFinancePrograms)
+  );
 }
 
 async function buildPriceTagData(tool){
@@ -12284,6 +12392,7 @@ const toolBrand =
   if(!brandMatches) return false;
 
   const equipmentMatches =
+    financeProgramGroupMatches(program, tool) ||
     programFlag('AllProducts') ||
     groupColumns.some(programFlag) ||
     (sku && programFlag(sku)) ||
@@ -12479,16 +12588,13 @@ function renderFinancingOptions(){
 
   const total = currentQuoteTotal();
 
-  const programs = state.paymentOptions
+  const programs = uniqueFinancePrograms(state.paymentOptions
     .filter(financingApplies)
     .filter(p =>
       clean(p.Type).toLowerCase() === 'finance' ||
       clean(p.Type).toLowerCase() === 'financing'
     )
-    .sort((a,b) =>
-      money(a.APR) - money(b.APR) ||
-      Number(clean(a.TermMonths)) - Number(clean(b.TermMonths))
-    );
+    .sort(compareFinancePrograms));
 
   const rebatePrograms = programs.filter(p =>
     clean(p.RebateEligible) === '' || isTrue(p.RebateEligible)
