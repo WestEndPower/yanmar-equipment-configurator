@@ -12632,9 +12632,11 @@ function renderFinancingOptions(){
           ? ` • Score up to ${scoreMax}`
           : '';
 
+    const aprText = money(p.APR).toFixed(2);
+
     return `
       <option value="${escapeHtml(id)}">
-        ${money(p.APR)}% APR • ${clean(p.TermMonths)} mo • ${fmtMoney(monthly)}/mo${scoreText}
+        ${aprText}% APR • ${clean(p.TermMonths)} mo • Score ${scoreMin > 0 && scoreMax > 0 ? `${scoreMin}-${scoreMax}` : scoreMin > 0 ? `${scoreMin}+` : scoreMax > 0 ? `Up to ${scoreMax}` : 'Not specified'} • ${fmtMoney(monthly)}/mo
       </option>
     `;
   };
