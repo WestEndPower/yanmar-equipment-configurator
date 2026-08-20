@@ -892,49 +892,47 @@ body.dealer-mode .dealer-only{
   Select Payment Option for Additional Discount
 </h3>
 
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-    <div>
-      <label for="stihl-credit-payment" style="color:var(--stihl-orange);font-weight:900;">
-  Credit Card
-</label>
-
-<label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:800;margin-bottom:6px;">
-  <input id="stihl-credit-full-payment"
-         type="checkbox"
-         style="width:auto;">
-  Pay Entire Purchase
-</label>
-      <input id="stihl-credit-payment"
-       type="text"
-       value="$0.00"
-       style="
-         text-align:right;
-         font-weight:700;
-         font-size:16px;
-       ">
-    </div>
-
-    <div>
-      <label for="stihl-cash-payment" style="color:var(--stihl-orange);font-weight:900;">
-  Cash / Bank Check
-</label>
-
-<label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:800;margin-bottom:6px;">
-  <input id="stihl-cash-full-payment"
-         type="checkbox"
-         style="width:auto;">
-  Pay Entire Purchase
-</label>
-      <input id="stihl-cash-payment"
-       type="text"
-       value="$0.00"
-       style="
-         text-align:right;
-         font-weight:700;
-         font-size:16px;
-       ">
+<div style="display:grid;gap:10px;">
+  <div style="display:grid;grid-template-columns:minmax(130px,180px) minmax(220px,1fr);gap:5px 10px;align-items:center;">
+    <label for="stihl-credit-payment" style="color:var(--stihl-orange);font-weight:900;margin:0;white-space:nowrap;">
+      Credit Card
+    </label>
+    <input id="stihl-credit-payment"
+           type="text"
+           value="$0.00"
+           style="text-align:right;font-weight:700;font-size:15px;padding:8px 9px;">
+    <div style="grid-column:1 / -1;display:flex;align-items:center;justify-content:center;gap:24px;flex-wrap:wrap;">
+      <label style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:800;margin:0;white-space:nowrap;">
+        <input id="stihl-credit-full-payment" type="checkbox" style="width:auto;margin:0;">
+        Pay Card in Full
+      </label>
+      <label style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:800;margin:0;white-space:nowrap;">
+        <input id="stihl-credit-balance-payment" type="checkbox" style="width:auto;margin:0;">
+        Pay Balance with Card
+      </label>
     </div>
   </div>
+
+  <div style="display:grid;grid-template-columns:minmax(130px,180px) minmax(220px,1fr);gap:5px 10px;align-items:center;">
+    <label for="stihl-cash-payment" style="color:var(--stihl-orange);font-weight:900;margin:0;white-space:nowrap;">
+      Cash / Bank Check
+    </label>
+    <input id="stihl-cash-payment"
+           type="text"
+           value="$0.00"
+           style="text-align:right;font-weight:700;font-size:15px;padding:8px 9px;">
+    <div style="grid-column:1 / -1;display:flex;align-items:center;justify-content:center;gap:24px;flex-wrap:wrap;">
+      <label style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:800;margin:0;white-space:nowrap;">
+        <input id="stihl-cash-full-payment" type="checkbox" style="width:auto;margin:0;">
+        Pay Cash in Full
+      </label>
+      <label style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:800;margin:0;white-space:nowrap;">
+        <input id="stihl-cash-balance-payment" type="checkbox" style="width:auto;margin:0;">
+        Pay Balance with Cash
+      </label>
+    </div>
+  </div>
+</div>
 
 <div style="
   margin-top:12px;
@@ -3399,9 +3397,42 @@ function currentPublicPricingSelection(){
       );
 
     if(financeProgramId){
+      const cashAmount =
+        money(
+          $('stihl-cash-payment')?.value
+        );
+
+      const creditAmount =
+        money(
+          $('stihl-credit-payment')?.value
+        );
+
       return {
         paymentMethod:"finance",
-        financeProgramId
+        financeProgramId,
+        cashAmount,
+        creditAmount
+      };
+    }
+  }
+
+  if(
+    cashBalancePaymentSelected() ||
+    creditBalancePaymentSelected()
+  ){
+    const payment =
+      paymentEngine(
+        currentQuoteTotal()
+      );
+
+    if(
+      payment.cashAmount > 0 ||
+      payment.creditAmount > 0
+    ){
+      return {
+        paymentMethod:"split",
+        cashAmount:payment.cashAmount,
+        creditAmount:payment.creditAmount
       };
     }
   }
@@ -4526,11 +4557,28 @@ function publicPromoFinancePricingKey(
   program
 ){
 
+  const rawApr =
+    money(program?.APR);
+
+  const apr =
+    rawApr > 0 &&
+    rawApr < 1
+      ? rawApr * 100
+      : rawApr;
+
   return [
     publicFinanceSKU(tool),
-    clean(
-      program?.ProgramID ||
-      program?.PaymentOptionID
+    Number(apr.toFixed(4)),
+    Number(
+      clean(program?.TermMonths)
+    ) || 0,
+    money(
+      program?.MinDownAmount ||
+      program?.MinimumDownAmount
+    ),
+    money(
+      program?.MinDownPercent ||
+      program?.MinimumDownPercent
     )
   ].join("|");
 }
@@ -5101,6 +5149,8 @@ function clearAll(){
 
   if($('stihl-credit-full-payment')) $('stihl-credit-full-payment').checked = false;
   if($('stihl-cash-full-payment')) $('stihl-cash-full-payment').checked = false;
+  if($('stihl-credit-balance-payment')) $('stihl-credit-balance-payment').checked = false;
+  if($('stihl-cash-balance-payment')) $('stihl-cash-balance-payment').checked = false;
   if($('stihl-finance-remaining-payment')) $('stihl-finance-remaining-payment').checked = false;
 
   if($('stihl-financing-select')){
@@ -6150,6 +6200,8 @@ $('stihl-customer-email').addEventListener('blur', () => {
   'stihl-cash-payment',
   'stihl-credit-full-payment',
   'stihl-cash-full-payment',
+  'stihl-credit-balance-payment',
+  'stihl-cash-balance-payment',
   'stihl-finance-remaining-payment',
   'stihl-customer-credit-score',
   'stihl-financing-select',
@@ -6167,6 +6219,8 @@ $('stihl-customer-email').addEventListener('blur', () => {
     if(el.checked){
 
       if($('stihl-credit-full-payment')) $('stihl-credit-full-payment').checked = false;
+      if($('stihl-credit-balance-payment')) $('stihl-credit-balance-payment').checked = false;
+      if($('stihl-cash-balance-payment')) $('stihl-cash-balance-payment').checked = false;
       if($('stihl-finance-remaining-payment')) $('stihl-finance-remaining-payment').checked = false;
 
       if($('stihl-credit-payment')) $('stihl-credit-payment').value = '$0.00';
@@ -6188,6 +6242,8 @@ $('stihl-customer-email').addEventListener('blur', () => {
     if(el.checked){
 
       if($('stihl-cash-full-payment')) $('stihl-cash-full-payment').checked = false;
+      if($('stihl-credit-balance-payment')) $('stihl-credit-balance-payment').checked = false;
+      if($('stihl-cash-balance-payment')) $('stihl-cash-balance-payment').checked = false;
       if($('stihl-finance-remaining-payment')) $('stihl-finance-remaining-payment').checked = false;
 
       if($('stihl-cash-payment')) $('stihl-cash-payment').value = '$0.00';
@@ -6204,9 +6260,51 @@ $('stihl-customer-email').addEventListener('blur', () => {
     }
   }
 
+  if(id === 'stihl-cash-balance-payment' && el.checked){
+    if($('stihl-credit-balance-payment')) $('stihl-credit-balance-payment').checked = false;
+    if($('stihl-finance-remaining-payment')) $('stihl-finance-remaining-payment').checked = false;
+    if($('stihl-cash-full-payment')) $('stihl-cash-full-payment').checked = false;
+    if($('stihl-credit-full-payment')) $('stihl-credit-full-payment').checked = false;
+
+    const total = currentQuoteTotal();
+    const credit = money($('stihl-credit-payment')?.value);
+    if($('stihl-cash-payment')){
+      $('stihl-cash-payment').value = fmtMoney(Math.max(total - credit, 0));
+    }
+  }
+
+  if(id === 'stihl-credit-balance-payment' && el.checked){
+    if($('stihl-cash-balance-payment')) $('stihl-cash-balance-payment').checked = false;
+    if($('stihl-finance-remaining-payment')) $('stihl-finance-remaining-payment').checked = false;
+    if($('stihl-cash-full-payment')) $('stihl-cash-full-payment').checked = false;
+    if($('stihl-credit-full-payment')) $('stihl-credit-full-payment').checked = false;
+
+    const total = currentQuoteTotal();
+    const cash = money($('stihl-cash-payment')?.value);
+    if($('stihl-credit-payment')){
+      $('stihl-credit-payment').value = fmtMoney(Math.max(total - cash, 0));
+    }
+  }
+
+  if(id === 'stihl-cash-payment' && $('stihl-cash-balance-payment')?.checked){
+    $('stihl-cash-balance-payment').checked = false;
+  }
+
+  if(id === 'stihl-credit-payment' && $('stihl-credit-balance-payment')?.checked){
+    $('stihl-credit-balance-payment').checked = false;
+  }
+
   if(id === 'stihl-finance-remaining-payment'){
 
   if(el.checked){
+
+    if($('stihl-credit-balance-payment')){
+      $('stihl-credit-balance-payment').checked = false;
+    }
+
+    if($('stihl-cash-balance-payment')){
+      $('stihl-cash-balance-payment').checked = false;
+    }
 
     if($('stihl-cash-full-payment')){
       $('stihl-cash-full-payment').checked = false;
@@ -12613,7 +12711,24 @@ if(
   return false;
 }
 
-  const amount = currentQuoteTotal();
+  const quoteTotal =
+    currentQuoteTotal();
+
+  const payment =
+    paymentEngine(
+      quoteTotal
+    );
+
+  /*
+    Program minimum and maximum amounts apply to
+    the remaining balance being financed after
+    cash and card deposits.
+  */
+  const amount =
+    financeRemainingSelected()
+      ? payment.financeAmount
+      : quoteTotal;
+
   const min = money(program.MinAmount);
   const max = money(program.MaxAmount);
 
@@ -12895,18 +13010,22 @@ function renderFinancingOptions(){
       clean(p.PaymentOptionID) ||
       clean(p.Label);
 
-    const minDown =
-      minimumDownForProgram(p, total);
+        const protectedPricing =
+      state.selectedTool
+        ? publicPromoFinancePricingCache.get(
+            publicPromoFinancePricingKey(
+              state.selectedTool,
+              p
+            )
+          )
+        : null;
 
-    const financed =
-      Math.max(total - minDown, 0);
-
-    const monthly =
-      monthlyPayment(
-        financed + money(p.ApplicationFee),
-        money(p.APR),
-        Number(clean(p.TermMonths))
-      );
+    const monthlyText =
+      protectedPricing
+        ? ` • ${fmtMoney(
+            protectedPricing.monthly
+          )}/mo`
+        : "";
 
     const scoreMin = money(p.CreditScoreMin);
     const scoreMax = money(p.CreditScoreMax);
@@ -12920,7 +13039,7 @@ function renderFinancingOptions(){
 
     return `
       <option value="${escapeHtml(id)}">
-        ${money(p.APR)}% APR • ${clean(p.TermMonths)} mo • ${fmtMoney(monthly)}/mo${scoreText}
+        ${money(p.APR)}% APR • ${clean(p.TermMonths)} mo${monthlyText}${scoreText}
       </option>
     `;
   };
@@ -15411,6 +15530,14 @@ function creditFullPaymentSelected(){
   return !!$('stihl-credit-full-payment')?.checked;
 }
 
+function cashBalancePaymentSelected(){
+  return !!$('stihl-cash-balance-payment')?.checked;
+}
+
+function creditBalancePaymentSelected(){
+  return !!$('stihl-credit-balance-payment')?.checked;
+}
+
 function financeRemainingSelected(){
   return !!$('stihl-finance-remaining-payment')?.checked;
 }
@@ -15480,6 +15607,12 @@ function paymentEngine(totalBeforeSavings){
   const creditFull =
     creditFullPaymentSelected();
 
+  const cashBalance =
+    cashBalancePaymentSelected();
+
+  const creditBalance =
+    creditBalancePaymentSelected();
+
   let enteredCash =
     money($('stihl-cash-payment')?.value);
 
@@ -15494,6 +15627,22 @@ function paymentEngine(totalBeforeSavings){
   if(creditFull){
     enteredCredit = total;
     enteredCash = 0;
+  }
+
+  if(cashBalance && !cashFull && !creditFull){
+    enteredCash =
+      Math.max(
+        total - enteredCredit,
+        0
+      );
+  }
+
+  if(creditBalance && !cashFull && !creditFull){
+    enteredCredit =
+      Math.max(
+        total - enteredCash,
+        0
+      );
   }
 
   enteredCash =
@@ -15538,6 +15687,8 @@ function paymentEngine(totalBeforeSavings){
     financeSelected,
     cashFull,
     creditFull,
+    cashBalance,
+    creditBalance,
     enteredCash,
     enteredCredit,
     enteredDeposit,
@@ -15798,19 +15949,23 @@ const linePaymentDiscount =
   parentLineDiscount +
   childLineDiscount;
 
+/*
+  The product card shows manufacturer-controlled
+  savings only. West End Power payment-option
+  savings are displayed separately in the quote
+  summary and must not be duplicated here.
+*/
 const packageFinalPrice =
   Math.max(
     packageTotal -
-    packageCustomerRebate -
-    linePaymentDiscount,
+    packageCustomerRebate,
     0
   );
 
 const packageDisplayedSavings =
   packageFactorySaleSavings +
   packageCustomerRebate +
-  packageManualDiscount +
-  linePaymentDiscount;
+  packageManualDiscount;
 
 const replacementControls = childItems
   .map(child => {
@@ -16452,6 +16607,28 @@ const grossProfit =
 
 const splitForFees =
   paymentSplitAmounts(taxableSubtotal + tax);
+
+/*
+  Keep the selected remaining-balance payment field
+  synchronized with the final recalculated total.
+  Manually entered deposits in the other field remain
+  unchanged.
+*/
+if(
+  cashBalancePaymentSelected() &&
+  $('stihl-cash-payment')
+){
+  $('stihl-cash-payment').value =
+    fmtMoney(splitForFees.cashAmount);
+}
+
+if(
+  creditBalancePaymentSelected() &&
+  $('stihl-credit-payment')
+){
+  $('stihl-credit-payment').value =
+    fmtMoney(splitForFees.creditAmount);
+}
 
 if($('stihl-payment-remaining-balance')){
 
@@ -17700,18 +17877,95 @@ async function unlockDealer(){
   }
 }
 
+async function restoreDealerSession(){
+
+  const token =
+    clean(
+      sessionStorage.getItem(
+        dealerSessionStorageKey()
+      )
+    );
+
+  if(!token){
+    dealerMode(false);
+    return;
+  }
+
+  try{
+    const response =
+      await fetch(
+        CONFIGURATOR_API + "/dealer-data",
+        {
+          method:"POST",
+          headers:{
+            "Content-Type":"application/json",
+            "X-Dealer-Session":token
+          },
+          body:JSON.stringify({
+            brandId:configuratorBrandId()
+          }),
+          cache:"no-store"
+        }
+      );
+
+    const result =
+      await response.json()
+        .catch(() => ({}));
+
+    if(!response.ok){
+      throw new Error(
+        result.error ||
+        "Dealer session is invalid or expired."
+      );
+    }
+
+    sessionStorage.setItem(
+      dealerSessionStorageKey(),
+      clean(result.dealerSessionToken)
+    );
+
+    applyPrivateDealerData(
+      result.data || {}
+    );
+
+    dealerMode(true);
+
+  }catch(error){
+    console.warn(
+      "Dealer session restore failed:",
+      error
+    );
+
+    sessionStorage.removeItem(
+      dealerSessionStorageKey()
+    );
+
+    dealerMode(false);
+  }
+}
+
 function bindDealerMode(){
 
-  sessionStorage.removeItem("dealerMode");
-  sessionStorage.removeItem(
-    dealerSessionStorageKey()
-  );
+  const restoreRequested =
+    sessionStorage.getItem("dealerMode") === "1" &&
+    clean(
+      sessionStorage.getItem(
+        dealerSessionStorageKey()
+      )
+    ) !== "";
 
-  dealerMode(false);
+  if(restoreRequested){
+    restoreDealerSession();
+  }else{
+    dealerMode(false);
+  }
 
   $("dealerModeBtn").addEventListener("click", function(){
 
     if(document.body.classList.contains("dealer-mode")){
+      sessionStorage.removeItem(
+        dealerSessionStorageKey()
+      );
       dealerMode(false);
     }else{
       openDealer();
