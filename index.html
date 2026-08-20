@@ -4028,6 +4028,19 @@ function compareFinancePrograms(a, b){
   );
 }
 
+function longestZeroPercentNoDownFinanceProgram(programs){
+  return (programs || [])
+    .filter(program =>
+      money(program.APR) === 0 &&
+      money(program.MinDownAmount || program.MinimumDownAmount) === 0 &&
+      money(program.MinDownPercent || program.MinimumDownPercent) === 0
+    )
+    .sort((a, b) =>
+      Number(clean(b.TermMonths)) - Number(clean(a.TermMonths)) ||
+      compareFinancePrograms(a, b)
+    )[0] || null;
+}
+
 function uniqueFinancePrograms(programs){
   const seen = new Set();
 
@@ -4148,18 +4161,57 @@ function requestPublicFinanceEligibility(tool){
         );
       }
 
+            const eligiblePrograms =
+        result.programs || [];
+
       const eligibleIDs =
         new Set(
-          (result.programs || [])
+          eligiblePrograms
             .map(program =>
-              clean(program.ProgramID)
+              clean(
+                program.ProgramID ||
+                program.PaymentOptionID
+              )
             )
             .filter(Boolean)
         );
 
+      const eligibleTerms =
+        new Set(
+          eligiblePrograms.map(program => {
+
+            const rawApr =
+              money(program.APR);
+
+            const apr =
+              rawApr > 0 &&
+              rawApr < 1
+                ? rawApr * 100
+                : rawApr;
+
+            return [
+              Number(apr.toFixed(4)),
+              Number(
+                clean(program.TermMonths)
+              ) || 0,
+              money(
+                program.MinDownAmount ||
+                program.MinimumDownAmount
+              ),
+              money(
+                program.MinDownPercent ||
+                program.MinimumDownPercent
+              )
+            ].join("|");
+          })
+        );
+
       publicFinanceEligibilityCache.set(
         sku,
-        eligibleIDs
+        {
+          eligibleIDs,
+          eligibleTerms
+        }
       );
 
       if(
@@ -4207,12 +4259,12 @@ function publicFinanceProgramIsAllowed(
     return false;
   }
 
-  const eligibleIDs =
+  const eligibility =
     publicFinanceEligibilityCache.get(
       sku
     );
 
-  if(!eligibleIDs){
+  if(!eligibility){
 
     requestPublicFinanceEligibility(
       tool
@@ -4227,65 +4279,77 @@ function publicFinanceProgramIsAllowed(
       program?.PaymentOptionID
     );
 
-  return eligibleIDs.has(
-    programID
+  if(
+    programID &&
+    eligibility.eligibleIDs.has(programID)
+  ){
+    return true;
+  }
+
+  /*
+    Some manufacturer finance rows use different or
+    duplicated program IDs. Match the protected API
+    result by APR, term, and required down payment.
+  */
+  const rawApr =
+    money(program?.APR);
+
+  const apr =
+    rawApr > 0 &&
+    rawApr < 1
+      ? rawApr * 100
+      : rawApr;
+
+  const programTerms =
+    [
+      Number(apr.toFixed(4)),
+      Number(
+        clean(program?.TermMonths)
+      ) || 0,
+      money(
+        program?.MinDownAmount ||
+        program?.MinimumDownAmount
+      ),
+      money(
+        program?.MinDownPercent ||
+        program?.MinimumDownPercent
+      )
+    ].join("|");
+
+  return eligibility.eligibleTerms.has(
+    programTerms
   );
 }
 
-function financeProgramFeeIsAllowed(program, tool){
+function financeProgramFeeIsAllowed(
+  program,
+  tool
+){
 
   /*
-    Local template mode:
-    Public finance eligibility comes from the
-    exported finance-programs.csv file.
-    Private dealer-fee restrictions will resume
-    when the secure brand API is connected.
+    Local template mode has no protected API.
+    Allow the exported finance programs to use
+    their normal local compatibility rules.
   */
-  if(clean(CONFIGURATOR_API) === ''){
+  if(clean(CONFIGURATOR_API) === ""){
     return true;
   }
-
-  if(
-    !document.body.classList.contains(
-      "dealer-mode"
-    )
-  ){
-    /*
-      The combined finance-programs export now carries
-      its own model/group eligibility flags. Do not make
-      display depend on the retired second eligibility tab.
-    */
-    return true;
-  }
-
-  const maximumAllowedFee =
-    toolMaximumFinanceFeePercent(tool);
 
   /*
-    A blank or zero product maximum does not
-    restrict available finance programs.
+    When the protected API is connected, both
+    public mode and Dealer Mode must use the same
+    protected eligibility decision.
+
+    The API applies either:
+    1. Minimum-profit eligibility when a minimum
+       profit is set; or
+    2. Maximum dealer-fee eligibility when no
+       minimum profit is set.
   */
-  if(maximumAllowedFee <= 0){
-    return true;
-  }
-
-  const rawProgramDealerFee =
-  money(program.DealerFeePercent);
-
-const programDealerFee =
-  rawProgramDealerFee > 0 &&
-  rawProgramDealerFee < 1
-    ? Number(
-        (rawProgramDealerFee * 100).toFixed(2)
-      )
-    : Number(
-        rawProgramDealerFee.toFixed(2)
-      );
-
-return (
-  programDealerFee <=
-  maximumAllowedFee
-);
+  return publicFinanceProgramIsAllowed(
+    program,
+    tool
+  );
 }
 
 function bestPromoFinanceForTool(t){
@@ -4317,7 +4381,7 @@ const basePurchasePrice =
 const activeRebate =
   rebateToCustomerOf(t);
 
-  return state.paymentOptions
+  const eligiblePrograms = state.paymentOptions
     .filter(program =>
       clean(program.Type).toLowerCase() === 'finance' ||
       clean(program.Type).toLowerCase() === 'financing'
@@ -4376,8 +4440,19 @@ const activeRebate =
       groupColumns.some(column => isTrue(program[column])) ||
       (sku && isTrue(program[sku])) ||
       (model && isTrue(program[model]))
-    )
-    .sort(compareFinancePrograms)[0] || null;
+    );
+
+  /*
+    The public Current Factory Offers card should advertise the
+    longest 0% program that requires no down payment for this model.
+    Keep the normal finance-program sort order everywhere else.
+  */
+  const longestZeroPercentNoDown =
+    longestZeroPercentNoDownFinanceProgram(eligiblePrograms);
+
+  return longestZeroPercentNoDown ||
+    eligiblePrograms.sort(compareFinancePrograms)[0] ||
+    null;
 }
 
 function rebateToCustomerOf(item){
@@ -4439,6 +4514,190 @@ function effectiveDealerCostOf(item){
   return money(item.DealerCost);
 }
 
+const publicPromoFinancePricingCache =
+  new Map();
+
+const publicPromoFinancePricingPending =
+  new Map();
+
+
+function publicPromoFinancePricingKey(
+  tool,
+  program
+){
+
+  return [
+    publicFinanceSKU(tool),
+    clean(
+      program?.ProgramID ||
+      program?.PaymentOptionID
+    )
+  ].join("|");
+}
+
+
+function requestPublicPromoFinancePricing(
+  tool,
+  displayedProgram
+){
+
+  if(
+    !tool ||
+    !displayedProgram ||
+    clean(CONFIGURATOR_API) === ""
+  ){
+    return;
+  }
+
+  const key =
+    publicPromoFinancePricingKey(
+      tool,
+      displayedProgram
+    );
+
+  if(
+    publicPromoFinancePricingCache.has(key) ||
+    publicPromoFinancePricingPending.has(key)
+  ){
+    return;
+  }
+
+  /*
+    Retrieve the eligible programs directly from the
+    protected API. This ensures the correct protected
+    ProgramID is used for the pricing request.
+  */
+  const request =
+    priceTagFinancePrograms(tool)
+      .then(async eligiblePrograms => {
+
+        const protectedProgram =
+          longestZeroPercentNoDownFinanceProgram(
+            eligiblePrograms
+          ) ||
+          eligiblePrograms[0] ||
+          null;
+
+        if(!protectedProgram){
+          throw new Error(
+            "No eligible protected finance program was found."
+          );
+        }
+
+        const protectedProgramID =
+          clean(
+            protectedProgram.ProgramID ||
+            protectedProgram.PaymentOptionID
+          );
+
+        if(!protectedProgramID){
+          throw new Error(
+            "Eligible finance program has no ProgramID."
+          );
+        }
+
+        const pricing =
+          await priceTagCustomerPricing(
+            tool,
+            "finance",
+            protectedProgramID
+          );
+
+        const sellingPrice =
+          money(
+            pricing.customerLinePrice
+          );
+
+        const freight =
+          priceTagFreightForTool(tool);
+
+        const taxable =
+          clean(tool.Taxable).toUpperCase() !==
+          "F";
+
+        const taxableSubtotal =
+          sellingPrice +
+          freight;
+
+        const salesTax =
+          taxable
+            ? taxableSubtotal * TAX_RATE
+            : 0;
+
+        const customerFee =
+          money(
+            protectedProgram.CustomerOriginationFee
+          );
+
+        const amountFinanced =
+          taxableSubtotal +
+          salesTax +
+          customerFee;
+
+        const rawApr =
+          money(
+            protectedProgram.APR
+          );
+
+        const apr =
+          rawApr > 0 &&
+          rawApr < 1
+            ? rawApr * 100
+            : rawApr;
+
+        const termMonths =
+          Number(
+            clean(
+              protectedProgram.TermMonths
+            )
+          ) || 0;
+
+        const monthly =
+          monthlyPayment(
+            amountFinanced,
+            apr,
+            termMonths
+          );
+
+        publicPromoFinancePricingCache.set(
+          key,
+          {
+            amountFinanced,
+            monthly
+          }
+        );
+
+        if(
+          state.selectedTool &&
+          publicFinanceSKU(
+            state.selectedTool
+          ) === publicFinanceSKU(tool)
+        ){
+          renderToolDetails();
+        }
+      })
+      .catch(error => {
+
+        console.error(
+          "Public promotional payment failed:",
+          error
+        );
+
+      })
+      .finally(() => {
+
+        publicPromoFinancePricingPending.delete(
+          key
+        );
+
+      });
+
+  publicPromoFinancePricingPending.set(
+    key,
+    request
+  );
+}
+
     function displayPrice(item){
 
   const msrp = money(item.MSRP);
@@ -4468,12 +4727,13 @@ const savingsLabel =
 
   const basePrice = sale || msrp || 0;
 
-/*
-  A factory rebate is payment-dependent.
-  Do not subtract it before payment selection.
-*/
-const priceAfterRebate = Math.max(basePrice - rebate, 0);
-const displayedPrice = basePrice;
+  /*
+    A factory rebate is a payment-dependent offer.
+    Keep the displayed product price at the current base price
+    until the customer selects an eligible payment option.
+  */
+  const priceAfterRebate = Math.max(basePrice - rebate, 0);
+  const displayedPrice = basePrice;
 
   const finance = bestPromoFinanceForTool(item);
 const financeWorksWithRebate =
@@ -4488,23 +4748,38 @@ const offerJoiner =
       : 'OR'
     : '';
 
-  let monthly = 0;
+    let monthly = 0;
+  let monthlyReady = false;
 
   if(finance){
-    const financePrice =
-  financeWorksWithRebate
-    ? priceAfterRebate
-    : basePrice;
 
-const principal =
-  (financePrice * (1 + TAX_RATE)) +
-  money(finance.ApplicationFee);
+    const pricingKey =
+      publicPromoFinancePricingKey(
+        item,
+        finance
+      );
 
-    monthly = monthlyPayment(
-      principal,
-      money(finance.APR),
-      Number(clean(finance.TermMonths))
-    );
+    const protectedPricing =
+      publicPromoFinancePricingCache.get(
+        pricingKey
+      );
+
+    if(protectedPricing){
+
+      monthly =
+        money(
+          protectedPricing.monthly
+        );
+
+      monthlyReady = true;
+
+    }else{
+
+      requestPublicPromoFinancePricing(
+        item,
+        finance
+      );
+    }
   }
 
   const offerDate = earliestPromoDateLabel(
@@ -4623,8 +4898,10 @@ const offerColumns =
             color:#555;
           ">
             ${escapeHtml(
-              clean(finance.Label) ||
-              `${money(finance.APR)}% for ${clean(finance.TermMonths)} Months`
+              money(finance.APR) === 0
+                ? `0% for ${clean(finance.TermMonths)} Months`
+                : clean(finance.Label) ||
+                  `${money(finance.APR)}% for ${clean(finance.TermMonths)} Months`
             )}
           </div>
 
@@ -4633,7 +4910,11 @@ const offerColumns =
             font-weight:900;
             color:#1f7a3a;
           ">
-            ${fmtMoney(monthly)} per month
+            ${
+              monthlyReady
+                ? `${fmtMoney(monthly)} per month`
+                : "Calculating payment..."
+            }
           </div>
         </div>
       ` : ''}
@@ -10054,6 +10335,9 @@ async function buildPriceTagData(tool){
     await priceTagFinancePrograms(tool);
 
   const financeProgram =
+    longestZeroPercentNoDownFinanceProgram(
+      eligibleFinancePrograms
+    ) ||
     eligibleFinancePrograms[0] ||
     null;
 
@@ -10350,13 +10634,15 @@ const qrCodeURL =
   const financeProgramLabel =
     finance
       ? (
-          clean(
-            finance.program.Label
-          ) ||
-          clean(
-            finance.program.ProgramName
-          ) ||
-          `${finance.apr}% for ${finance.termMonths} Months`
+          finance.apr === 0
+            ? `0% for ${finance.termMonths} Months`
+            : clean(
+                finance.program.Label
+              ) ||
+              clean(
+                finance.program.ProgramName
+              ) ||
+              `${finance.apr}% for ${finance.termMonths} Months`
         )
       : '';
 
@@ -12632,11 +12918,9 @@ function renderFinancingOptions(){
           ? ` • Score up to ${scoreMax}`
           : '';
 
-    const aprText = money(p.APR).toFixed(2);
-
     return `
       <option value="${escapeHtml(id)}">
-        ${aprText}% APR • ${clean(p.TermMonths)} mo • Score ${scoreMin > 0 && scoreMax > 0 ? `${scoreMin}-${scoreMax}` : scoreMin > 0 ? `${scoreMin}+` : scoreMax > 0 ? `Up to ${scoreMax}` : 'Not specified'} • ${fmtMoney(monthly)}/mo
+        ${money(p.APR)}% APR • ${clean(p.TermMonths)} mo • ${fmtMoney(monthly)}/mo${scoreText}
       </option>
     `;
   };
@@ -15517,14 +15801,16 @@ const linePaymentDiscount =
 const packageFinalPrice =
   Math.max(
     packageTotal -
-    packageCustomerRebate,
+    packageCustomerRebate -
+    linePaymentDiscount,
     0
   );
 
 const packageDisplayedSavings =
   packageFactorySaleSavings +
   packageCustomerRebate +
-  packageManualDiscount;
+  packageManualDiscount +
+  linePaymentDiscount;
 
 const replacementControls = childItems
   .map(child => {
