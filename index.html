@@ -12511,18 +12511,37 @@ function minimumDownForProgram(program, total){
     program.MinimumDown ||
     program.MinimumDownAmount ||
     program.MinimumDownPayment ||
+    program.MinDownAmount ||
     program.minimundown ||
     program.minimumdown
   );
 
-  const percent = money(
+  const rawPercent = money(
     program.MinimumDownPercent ||
     program.MinDownPercent ||
     program.minimumdownpercent
   );
 
-  if(fixed > 0) return fixed;
-  if(percent > 0) return total * (percent / 100);
+  /*
+    Spreadsheet percentages may be exported as:
+    0.25 = 25%
+    25   = 25%
+  */
+  const percent =
+    rawPercent > 0 && rawPercent < 1
+      ? rawPercent * 100
+      : rawPercent;
+
+  if(fixed > 0){
+    return Math.min(fixed, total);
+  }
+
+  if(percent > 0){
+    return Math.min(
+      total * (percent / 100),
+      total
+    );
+  }
 
   return 0;
 }
@@ -12711,26 +12730,38 @@ if(
   return false;
 }
 
-  const quoteTotal =
+    const quoteTotal =
     currentQuoteTotal();
 
-  const payment =
-    paymentEngine(
-      quoteTotal
+  const enteredCash =
+    money(
+      $('stihl-cash-payment')?.value
+    );
+
+  const enteredCredit =
+    money(
+      $('stihl-credit-payment')?.value
     );
 
   /*
-    Program minimum and maximum amounts apply to
-    the remaining balance being financed after
-    cash and card deposits.
+    Program minimum and maximum amounts always apply
+    to the potential financed balance after entered
+    cash and card deposits. This does not depend on
+    dropdown-render timing or checkbox state.
   */
   const amount =
-    financeRemainingSelected()
-      ? payment.financeAmount
-      : quoteTotal;
+    Math.max(
+      quoteTotal -
+      enteredCash -
+      enteredCredit,
+      0
+    );
 
-  const min = money(program.MinAmount);
-  const max = money(program.MaxAmount);
+  const min =
+    money(program.MinAmount);
+
+  const max =
+    money(program.MaxAmount);
 
   if(min && amount < min) return false;
   if(max && amount > max) return false;
@@ -15667,11 +15698,20 @@ function paymentEngine(totalBeforeSavings){
       ? Math.max(minimumDown - enteredDeposit, 0)
       : 0;
 
+    /*
+    Automatically place any minimum-down shortfall
+    on the credit card. If the customer moves it to
+    cash, the card fee is removed and the available
+    West End Power discount can increase.
+  */
   const cashAmount =
-    enteredCash + requiredExtraDown;
+    enteredCash;
 
   const creditAmount =
-    enteredCredit;
+    Math.min(
+      enteredCredit + requiredExtraDown,
+      Math.max(total - enteredCash, 0)
+    );
 
   const amountDueToday =
     cashAmount + creditAmount;
@@ -17045,24 +17085,44 @@ if(selectedProgram && selectedFinanceIsBelowMinimum(totalBeforeFinanceCheck)){
     return;
   }
 
-  const split =
+    const split =
     paymentSplitAmounts(totalBeforeFinance);
 
   const enteredDown =
-    split.cashAmount + split.creditAmount;
+    split.customerDeposit;
 
   const minimumDown =
-    minimumDownForProgram(selectedProgram, totalBeforeFinance);
+    minimumDownForProgram(
+      selectedProgram,
+      totalBeforeFinance
+    );
+
+  const additionalDownRequired =
+    Math.max(
+      minimumDown - enteredDown,
+      0
+    );
 
   if(minimumDownRow){
-    minimumDownRow.style.display = minimumDown > 0 ? 'flex' : 'none';
+    minimumDownRow.style.display =
+      minimumDown > 0 ? 'flex' : 'none';
   }
 
-  const requiredDown =
-    Math.max(enteredDown, minimumDown);
+  /*
+    Show the automatically required amount in the
+    credit-card field. The customer may move it to
+    cash afterward.
+  */
+  if(
+    additionalDownRequired > 0 &&
+    $('stihl-credit-payment')
+  ){
+    $('stihl-credit-payment').value =
+      fmtMoney(split.creditAmount);
+  }
 
   const amountFinanced =
-    Math.max(totalBeforeFinance - requiredDown, 0);
+    split.financeAmount;
 
   const principalFinanced =
     amountFinanced + money(selectedProgram.ApplicationFee);
@@ -17078,11 +17138,11 @@ if(selectedProgram && selectedFinanceIsBelowMinimum(totalBeforeFinanceCheck)){
     financeSummary.style.display = '';
   }
 
-  if($('stihl-minimum-down-display')){
+    if($('stihl-minimum-down-display')){
     $('stihl-minimum-down-display').textContent =
-      enteredDown < minimumDown
-        ? `${fmtMoney(minimumDown)} required — ${fmtMoney(minimumDown - enteredDown)} more needed`
-        : fmtMoney(minimumDown);
+      additionalDownRequired > 0
+        ? `${fmtMoney(minimumDown)} required — ${fmtMoney(additionalDownRequired)} added to Credit Card`
+        : `${fmtMoney(minimumDown)} required — requirement met`;
   }
 
   if($('stihl-financed-display')){
