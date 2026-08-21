@@ -996,7 +996,12 @@ body.dealer-mode .dealer-only{
   <div id="stihl-finance-summary" style="display:none;margin-top:12px;">
     <div class="stihl-line" id="stihl-minimum-down-row" style="display:none;">
       <span>Minimum Down Payment</span>
-      <strong id="stihl-minimum-down-display">$0.00</strong>
+      <strong id="stihl-minimum-down-display">Not Required</strong>
+    </div>
+
+    <div class="stihl-line" id="stihl-minimum-down-status-row" style="display:none;">
+      <span>Status</span>
+      <strong id="stihl-minimum-down-status">Down Payment Not Met</strong>
     </div>
 
     <div class="stihl-line">
@@ -6332,19 +6337,107 @@ $('stihl-customer-email').addEventListener('blur', () => {
   if(id === 'stihl-financing-select'){
     el.dataset.selectedValue = clean(el.value);
 
-    if(clean(el.value) && $('stihl-financing-in-lieu-select')){
-      $('stihl-financing-in-lieu-select').value = '';
-      $('stihl-financing-in-lieu-select').dataset.selectedValue = '';
+    if(clean(el.value)){
+      const clearCreditAmount =
+        creditFullPaymentSelected() ||
+        creditBalancePaymentSelected();
+
+      const clearCashAmount =
+        cashFullPaymentSelected() ||
+        cashBalancePaymentSelected();
+
+      if($('stihl-financing-in-lieu-select')){
+        $('stihl-financing-in-lieu-select').value = '';
+        $('stihl-financing-in-lieu-select').dataset.selectedValue = '';
+      }
+
+      if(clearCreditAmount && $('stihl-credit-payment')){
+        $('stihl-credit-payment').value = '$0.00';
+      }
+
+      if(clearCashAmount && $('stihl-cash-payment')){
+        $('stihl-cash-payment').value = '$0.00';
+      }
+
+      if($('stihl-credit-full-payment')){
+        $('stihl-credit-full-payment').checked = false;
+      }
+
+      if($('stihl-cash-full-payment')){
+        $('stihl-cash-full-payment').checked = false;
+      }
+
+      if($('stihl-credit-balance-payment')){
+        $('stihl-credit-balance-payment').checked = false;
+      }
+
+      if($('stihl-cash-balance-payment')){
+        $('stihl-cash-balance-payment').checked = false;
+      }
+
+      if($('stihl-finance-remaining-payment')){
+        $('stihl-finance-remaining-payment').checked = true;
+      }
     }
   }
 
   if(id === 'stihl-financing-in-lieu-select'){
     el.dataset.selectedValue = clean(el.value);
 
-    if(clean(el.value) && $('stihl-financing-select')){
-      $('stihl-financing-select').value = '';
-      $('stihl-financing-select').dataset.selectedValue = '';
+    if(clean(el.value)){
+      const clearCreditAmount =
+        creditFullPaymentSelected() ||
+        creditBalancePaymentSelected();
+
+      const clearCashAmount =
+        cashFullPaymentSelected() ||
+        cashBalancePaymentSelected();
+
+      if($('stihl-financing-select')){
+        $('stihl-financing-select').value = '';
+        $('stihl-financing-select').dataset.selectedValue = '';
+      }
+
+      if(clearCreditAmount && $('stihl-credit-payment')){
+        $('stihl-credit-payment').value = '$0.00';
+      }
+
+      if(clearCashAmount && $('stihl-cash-payment')){
+        $('stihl-cash-payment').value = '$0.00';
+      }
+
+      if($('stihl-credit-full-payment')){
+        $('stihl-credit-full-payment').checked = false;
+      }
+
+      if($('stihl-cash-full-payment')){
+        $('stihl-cash-full-payment').checked = false;
+      }
+
+      if($('stihl-credit-balance-payment')){
+        $('stihl-credit-balance-payment').checked = false;
+      }
+
+      if($('stihl-cash-balance-payment')){
+        $('stihl-cash-balance-payment').checked = false;
+      }
+
+      if($('stihl-finance-remaining-payment')){
+        $('stihl-finance-remaining-payment').checked = true;
+      }
     }
+  }
+
+  if(
+    el.checked &&
+    [
+      'stihl-cash-full-payment',
+      'stihl-credit-full-payment',
+      'stihl-cash-balance-payment',
+      'stihl-credit-balance-payment'
+    ].includes(id)
+  ){
+    clearSelectedFinancingProgram();
   }
 
   renderCart();
@@ -6821,7 +6914,7 @@ freight: (() => {
   const factoryAmount =
     summary.rows
       .filter(row =>
-        freightKey(row.applyWhen) === 'ALLSALES'
+        freightKey(row.applyWhen) !== 'NOTINSTOCK'
       )
       .reduce(
         (sum, row) =>
@@ -6911,9 +7004,7 @@ setupInstallation:
   setupFee(),
 
 tradeAllowance:
-  money(
-    $('stihl-trade-allowance')?.value
-  ),
+  tradeAllowance(),
 
 extendedWarranty:
   money(
@@ -12538,12 +12629,45 @@ function minimumDownForProgram(program, total){
 
   if(percent > 0){
     return Math.min(
-      total * (percent / 100),
+      Math.ceil(
+        total * (percent / 100)
+      ),
       total
     );
   }
 
   return 0;
+}
+
+function minimumDownRequirementLabel(program){
+  if(!program) return 'Not Required';
+
+  const fixed = money(
+    program.MinimumDown ||
+    program.MinimumDownAmount ||
+    program.MinimumDownPayment ||
+    program.MinDownAmount
+  );
+
+  const rawPercent = money(
+    program.MinimumDownPercent ||
+    program.MinDownPercent
+  );
+
+  const percent =
+    rawPercent > 0 && rawPercent < 1
+      ? rawPercent * 100
+      : rawPercent;
+
+  if(fixed > 0){
+    return `${fmtMoney(fixed)} required`;
+  }
+
+  if(percent > 0){
+    return `${Number(percent.toFixed(2))}% required`;
+  }
+
+  return 'Not Required';
 }
 
 function selectedCustomerFinanceProgram(){
@@ -12573,7 +12697,11 @@ function selectedProgramAllowsRebate(){
   if(!program){
     return (
       cashFullPaymentSelected() ||
-      creditFullPaymentSelected()
+      creditFullPaymentSelected() ||
+      cashBalancePaymentSelected() ||
+      creditBalancePaymentSelected() ||
+      money($('stihl-cash-payment')?.value) > 0 ||
+      money($('stihl-credit-payment')?.value) > 0
     );
   }
 
@@ -12832,25 +12960,8 @@ const toolBrand =
 
   if(!equipmentMatches) return false;
 
-  const requiredProfit = minimumProfitAmountTotal();
-  if(requiredProfit <= 0) return true;
-
-  const rebateCompatible = isTrue(program.RebateCompatible);
-  const subtotal = state.cart.reduce((sum, line) => sum + lineTotal(line), 0);
-  const customerRebate = rebateCompatible ? customerRebateAmount() : 0;
-  const dealerRebate = rebateCompatible ? dealerRebateAmount() : 0;
-  const sellingSubtotal = Math.max(
-    subtotal - westEndPowerDiscountAmount(subtotal) - customerRebate,
-    0
-  );
-  const projectedGrossProfit =
-    sellingSubtotal + dealerRebate - cartTrueDealerCostTotal();
-  const rawFee = money(program.DealerFeePercent);
-  const feePercent = rawFee > 0 && rawFee < 1 ? rawFee : rawFee / 100;
-  const projectedNetProfit =
-    projectedGrossProfit - (sellingSubtotal * feePercent);
-
-  return projectedNetProfit >= requiredProfit;
+  /* Protected API eligibility is authoritative. */
+  return true;
 }
     
      async function emailQuote(){
@@ -15621,10 +15732,18 @@ function paymentMethodDiscountPercent(method){
   return 0;
 }
 
+function paymentCents(value){
+  return Math.round(
+    ((Number(value) || 0) + Number.EPSILON) * 100
+  ) / 100;
+}
+
 function paymentEngine(totalBeforeSavings){
 
   const total =
-    Math.max(Number(totalBeforeSavings) || 0, 0);
+    paymentCents(
+      Math.max(Number(totalBeforeSavings) || 0, 0)
+    );
 
   const selectedProgram =
     selectedCustomerFinanceProgram();
@@ -15645,10 +15764,14 @@ function paymentEngine(totalBeforeSavings){
     creditBalancePaymentSelected();
 
   let enteredCash =
-    money($('stihl-cash-payment')?.value);
+    paymentCents(
+      money($('stihl-cash-payment')?.value)
+    );
 
   let enteredCredit =
-    money($('stihl-credit-payment')?.value);
+    paymentCents(
+      money($('stihl-credit-payment')?.value)
+    );
 
   if(cashFull){
     enteredCash = total;
@@ -15686,39 +15809,34 @@ function paymentEngine(totalBeforeSavings){
     );
 
   const enteredDeposit =
-    enteredCash + enteredCredit;
+    paymentCents(enteredCash + enteredCredit);
 
   const minimumDown =
     selectedProgram
-      ? minimumDownForProgram(selectedProgram, total)
+      ? paymentCents(
+          minimumDownForProgram(selectedProgram, total)
+        )
       : 0;
 
   const requiredExtraDown =
     financeSelected
-      ? Math.max(minimumDown - enteredDeposit, 0)
+      ? paymentCents(
+          Math.max(minimumDown - enteredDeposit, 0)
+        )
       : 0;
 
-    /*
-    Automatically place any minimum-down shortfall
-    on the credit card. If the customer moves it to
-    cash, the card fee is removed and the available
-    West End Power discount can increase.
-  */
-  const cashAmount =
-    enteredCash;
+  const cashAmount = enteredCash;
 
-  const creditAmount =
-    Math.min(
-      enteredCredit + requiredExtraDown,
-      Math.max(total - enteredCash, 0)
-    );
+  const creditAmount = enteredCredit;
 
   const amountDueToday =
-    cashAmount + creditAmount;
+    paymentCents(cashAmount + creditAmount);
 
   const financeAmount =
     financeSelected
-      ? Math.max(total - amountDueToday, 0)
+      ? paymentCents(
+          Math.max(total - amountDueToday, 0)
+        )
       : 0;
 
   return {
@@ -16597,10 +16715,18 @@ const tax =
     ? 0
     : taxableSubtotal * TAX_RATE;
 
+/*
+  A remaining balance is only an amount financed after a
+  financing program has actually been selected. Keep the
+  customer balance visible elsewhere, but reset the dealer
+  financing totals when the program is cleared.
+*/
 const amountFinanced =
-  taxableSubtotal +
-  tax -
-  selectedDepositAmount(taxableSubtotal + tax);
+  selectedProgram
+    ? taxableSubtotal +
+      tax -
+      selectedDepositAmount(taxableSubtotal + tax)
+    : 0;
 
 const principalFinanced =
   amountFinanced +
@@ -16613,7 +16739,13 @@ const principalFinanced =
 */
 const sellingSubtotalForProfit =
   Math.max(
-    taxableSubtotal -
+    /*
+      A trade allowance reduces the customer's taxable balance,
+      but it is consideration received as trade inventory rather
+      than a discount on the new equipment. Keep it out of the
+      new-equipment gross-profit reduction.
+    */
+    subtotal -
     freight -
     delivery -
     setup -
@@ -16702,8 +16834,13 @@ if($('stihl-payment-remaining-balance')){
   }
 }
 
+/*
+  Calculate the card cost from the payment split itself. This
+  keeps full-card, balance-card and manually entered card
+  payments consistent even while controls are being switched.
+*/
 const creditCardProcessingFee =
-  paymentDealerFeeAmount(splitForFees.creditAmount);
+  paymentCents(splitForFees.creditAmount * 0.03);
 
 const financingProgramFee =
   selectedProgram
@@ -17006,6 +17143,10 @@ if(minimumDownRow){
   minimumDownRow.style.display = 'none';
 }
 
+if($('stihl-minimum-down-status-row')){
+  $('stihl-minimum-down-status-row').style.display = 'none';
+}
+
 const totalBeforeFinanceCheck =
   currentQuoteTotal();
 
@@ -17097,28 +17238,30 @@ if(selectedProgram && selectedFinanceIsBelowMinimum(totalBeforeFinanceCheck)){
       totalBeforeFinance
     );
 
-  const additionalDownRequired =
-    Math.max(
-      minimumDown - enteredDown,
-      0
-    );
-
   if(minimumDownRow){
     minimumDownRow.style.display =
       minimumDown > 0 ? 'flex' : 'none';
   }
 
-  /*
-    Show the automatically required amount in the
-    credit-card field. The customer may move it to
-    cash afterward.
-  */
-  if(
-    additionalDownRequired > 0 &&
-    $('stihl-credit-payment')
-  ){
-    $('stihl-credit-payment').value =
-      fmtMoney(split.creditAmount);
+  if($('stihl-minimum-down-status-row')){
+    $('stihl-minimum-down-status-row').style.display =
+      minimumDown > 0 ? 'flex' : 'none';
+  }
+
+  if($('stihl-minimum-down-status')){
+    const requirementMet =
+      minimumDown <= 0 ||
+      enteredDown >= minimumDown;
+
+    $('stihl-minimum-down-status').textContent =
+      requirementMet
+        ? 'Down Payment Requirement Met'
+        : 'Down Payment Not Met';
+
+    $('stihl-minimum-down-status').style.color =
+      requirementMet
+        ? '#1f7a3a'
+        : '#b00020';
   }
 
   const amountFinanced =
@@ -17138,11 +17281,9 @@ if(selectedProgram && selectedFinanceIsBelowMinimum(totalBeforeFinanceCheck)){
     financeSummary.style.display = '';
   }
 
-    if($('stihl-minimum-down-display')){
+  if($('stihl-minimum-down-display')){
     $('stihl-minimum-down-display').textContent =
-      additionalDownRequired > 0
-        ? `${fmtMoney(minimumDown)} required — ${fmtMoney(additionalDownRequired)} added to Credit Card`
-        : `${fmtMoney(minimumDown)} required — requirement met`;
+      minimumDownRequirementLabel(selectedProgram);
   }
 
   if($('stihl-financed-display')){
@@ -17209,7 +17350,7 @@ if($('stihl-finance-total-payback-display')){
   }
 
   if($('stihl-minimum-down-display')){
-    $('stihl-minimum-down-display').textContent = '$0.00';
+    $('stihl-minimum-down-display').textContent = 'Not Required';
   }
 
   if($('stihl-financed-display')){

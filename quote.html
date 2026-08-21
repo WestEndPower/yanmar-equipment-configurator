@@ -753,7 +753,7 @@ const savedDocument =
 
 const dealerQuoteMode =
   savedDocument.dealerMode === true &&
-  sessionStorage.getItem('dealerMode') === '1';
+  !!dealerSessionToken;
 
 document.body.classList.toggle(
   'quote-dealer',
@@ -1537,6 +1537,9 @@ async function syncDealerQuoteState(){
           },
 
           body:JSON.stringify({
+            brandId:
+              quoteBrandId,
+
             quoteNumber:
               documentState.quoteNumber,
 
@@ -1572,8 +1575,18 @@ async function syncDealerQuoteState(){
               ),
 
             payment:
-              clean(
-                savedPayment.program
+              clean(savedPayment.program) ||
+              (
+                money(savedPayment.credit) > 0 &&
+                money(savedPayment.cash) <= 0
+                  ? "Credit Card"
+                  : money(savedPayment.cash) > 0 &&
+                    money(savedPayment.credit) <= 0
+                    ? "Cash / Bank Check"
+                    : money(savedPayment.cash) > 0 &&
+                      money(savedPayment.credit) > 0
+                      ? "Mixed Cash / Credit"
+                      : ""
               ),
 
             selectedTool:
@@ -1605,6 +1618,14 @@ async function syncDealerQuoteState(){
               documentState.payments,
 
             payload:{
+              plannedPaymentMethod:
+                money(savedPayment.credit) > 0 &&
+                money(savedPayment.cash) <= 0
+                  ? "credit"
+                  : money(savedPayment.financed) > 0
+                    ? "finance"
+                    : "cash",
+
               items:
                 visibleLines.map(line => ({
                   qty:
@@ -2539,7 +2560,7 @@ if(!receivedBy){
       new Date().toISOString().slice(0,10),
     amount,
     methodKey,
-    method: '',
+    method: paymentMethodLabel({methodKey}),
     cardType,
     reference: clean(
       document.getElementById('payment-reference').value
