@@ -1474,6 +1474,11 @@ body.dealer-mode .dealer-only{
 </div>
 
 <div class="stihl-line">
+  <span>Internal Freight Cost</span>
+  <strong id="stihl-internal-freight-cost-display">$0.00</strong>
+</div>
+
+<div class="stihl-line">
   <span>True Dealer Cost</span>
   <strong id="stihl-true-dealer-cost-display">$0.00</strong>
 </div>
@@ -1554,9 +1559,6 @@ body.dealer-mode .dealer-only{
   <input id="stihl-special-order-freight" type="checkbox" style="width:auto;">
   Add Special Order Freight Charge
 </label>
-
-</div>
-         
           
           <div class="dealer-only" style="margin:16px 0 10px;">
   <label for="stihl-salesperson">Prepared By</label>
@@ -2736,6 +2738,72 @@ function cartTrueDealerCostTotal(){
   );
 }
 
+function cartInternalFreightCostTotal(){
+  return state.cart
+    .filter(parentLine =>
+      parentLine &&
+      parentLine.item &&
+      !parentLine.included &&
+      !parentLine.requiredItem
+    )
+    .reduce((total, parentLine) => {
+      const actualFreightCost =
+        lineActualFreightCost(
+          parentLine
+        );
+
+      if(actualFreightCost !== null){
+        return (
+          total +
+          actualFreightCost
+        );
+      }
+
+      const parentSKU =
+        tightSku(
+          skuOf(parentLine.item)
+        );
+
+      const packageLines = [
+        parentLine,
+        ...state.cart.filter(childLine =>
+          childLine &&
+          childLine.item &&
+          childLine.requiredItem &&
+          !childLine.included &&
+          tightSku(childLine.parentSku) ===
+            parentSKU
+        )
+      ];
+
+      const estimatedInternalCost =
+        packageLines.reduce(
+          (sum, packageLine) => {
+            const amount =
+              skuFreightAmount(
+                packageLine.item,
+                Number(packageLine.qty) || 1
+              );
+
+            return (
+              sum +
+              (
+                amount === null
+                  ? 0
+                  : amount
+              )
+            );
+          },
+          0
+        );
+
+      return (
+        total +
+        estimatedInternalCost
+      );
+    }, 0);
+}
+
 function isDateActive(startDate, endDate){
 
   const today = new Date();
@@ -3686,7 +3754,12 @@ function dealerEngine(){
 
   const dealerCost = cartLineDealerCostTotal();
   const advertisingFee = cartAdvertisingFeeTotal();
-  const trueDealerCost = cartTrueDealerCostTotal();
+    const internalFreightCost =
+    cartInternalFreightCostTotal();
+
+  const trueDealerCost =
+    cartTrueDealerCostTotal() +
+    internalFreightCost;
   const lineDiscounts = cartLineDiscountTotal();
 
   const bidFleet = bidFleetEngine();
@@ -3759,6 +3832,7 @@ function dealerEngine(){
     dealerCost,
     advertisingFee,
     trueDealerCost,
+    internalFreightCost,
     lineDiscounts,
     customerDiscount,
     customerRebate,
@@ -6511,7 +6585,7 @@ if(viewQuote){
           Number(line.qty) || 1;
 
         const setupAmount =
-          line.setupSelected
+          setupChargeApplies(line)
             ? money(line.item.AssemblyAmount) * qty
             : 0;
 
@@ -6690,6 +6764,10 @@ return {
           qty,
           included: !!line.included,
           setupSelected: !!line.setupSelected,
+          actualFreightCost:
+            lineActualFreightCost(line),
+          customerFreightCharge:
+            automaticYanmarPackageFreight(line),
           item: line.item,
           originalLineTotal,
           paymentDiscount:
@@ -6953,11 +7031,17 @@ freight: (() => {
       'Special Order Freight';
   }
 
-  return {
+    return {
     label,
     factoryAmount,
     specialOrderAmount,
     total,
+
+    customerFreightCharge:
+      total,
+
+    internalFreightCost:
+      cartInternalFreightCostTotal(),
 
     details:
       summary.rows.map(row => ({
@@ -10148,6 +10232,13 @@ function priceTagFreightForTool(tool){
     included: false
   };
 
+    const skuFreight =
+    skuFreightAmount(tool, 1);
+
+  if(skuFreight !== null){
+    return skuFreight;
+  }
+
   const group =
     freightGroupOf(line);
 
@@ -11887,121 +11978,712 @@ function freightAmountForRule(rule, qty, basisItem){
   return amount * qty;
 }
 
-function freightSummary(){
-  const rows = [];
-  const debug = [];
-  const appliedPerOrderRules = new Set();
-  let total = 0;
+function skuFreightAmount(item, qty = 1){
+  if(!item){
+    return null;
+  }
 
-  state.cart.forEach(line => {
-    if(!line || !line.item || line.included) return;
+  const rateType =
+    freightKey(item.FreightRateType);
 
-    const group = freightGroupOf(line);
-    const qty = Number(line.qty) || 1;
+  if(!rateType){
+    return null;
+  }
 
-    const matchingRules = state.freightRules.filter(rule => {
-      if(!freightRuleMatchesGroup(rule, group)) return false;
+  const quantity =
+    Math.max(Number(qty) || 1, 1);
 
-      const ruleType =
-        freightKey(rule.RuleType || rule.ChargeType);
+  if(
+    rateType === 'FIXED' ||
+    rateType === 'AMOUNT'
+  ){
+    return (
+      money(item.FreightAmount) *
+      quantity
+    );
+  }
 
-      const ruleQty = ruleType === 'FIXEDPERORDER'
-        ? state.cart.reduce((sum, candidate) => {
-            if(
-              !candidate ||
-              !candidate.item ||
-              candidate.included ||
-              lineIsInStock(candidate) ||
-              !freightRuleMatchesGroup(
-                rule,
-                freightGroupOf(candidate)
-              )
-            ){
-              return sum;
-            }
+  if(rateType === 'PERCENT'){
+    const enteredPercent =
+      Number(item.FreightPercent);
 
-            return sum + (Number(candidate.qty) || 1);
-          }, 0)
-        : qty;
+    if(
+      !Number.isFinite(enteredPercent) ||
+      enteredPercent <= 0
+    ){
+      return 0;
+    }
 
-      return (
-        freightQtyMatches(rule, ruleQty) &&
-        freightApplyWhenMatches(rule, {
-          group,
-          qty: ruleQty,
-          lines:[line]
-        })
-      );
-    });
+    const decimalRate =
+      enteredPercent <= 1
+        ? enteredPercent
+        : enteredPercent / 100;
 
-    const pricedMatches = matchingRules
-      .map(rule => ({
-        rule,
-        amount: freightAmountForRule(rule, qty, line.item)
-      }))
-      .filter(match => {
-        const ruleType =
-          freightKey(
-            match.rule.RuleType ||
-            match.rule.ChargeType
-          );
+    return (
+      effectiveDealerCostOf(item) *
+      quantity *
+      decimalRate
+    );
+  }
 
-        if(ruleType !== 'FIXEDPERORDER'){
-          return true;
-        }
+  return null;
+}
 
-        const ruleID = freightKey(
-          match.rule.RuleID ||
-          match.rule.RuleName ||
-          match.rule.DisplayLabel
+function roundCustomerFreight(amount){
+  const value = Math.max(Number(amount) || 0, 0);
+
+  if(value <= 0){
+    return 0;
+  }
+
+  if(value <= 100){
+    return Math.ceil(value / 25) * 25;
+  }
+
+  return Math.ceil(value / 50) * 50;
+}
+
+function lineActualFreightCost(line){
+  if(!line){
+    return null;
+  }
+
+  const raw =
+    clean(line.actualFreightCost);
+
+  if(raw === ''){
+    return null;
+  }
+
+  const amount =
+    Number(raw);
+
+  return Number.isFinite(amount)
+    ? Math.max(amount, 0)
+    : null;
+}
+
+function isYanmarAttachmentFreightGroup(group){
+  const key = freightKey(group);
+
+  return (
+    key === 'YANMARATTACHMENT' ||
+    key === 'YANMARACCESSORY'
+  );
+}
+
+function isTarterFreightGroup(group){
+  return freightKey(group) === 'TARTERATTACHMENT';
+}
+
+function automaticYanmarPackageFreight(parentLine){
+  if(
+    !parentLine ||
+    !parentLine.item ||
+    parentLine.included
+  ){
+    return 0;
+  }
+
+  const parentSKU =
+    tightSku(
+      skuOf(parentLine.item)
+    );
+
+  const packageLines = [
+    parentLine,
+    ...state.cart.filter(childLine =>
+      childLine &&
+      childLine.item &&
+      childLine.requiredItem &&
+      tightSku(childLine.parentSku) ===
+        parentSKU
+    )
+  ];
+
+      const freightLines =
+    packageLines.filter(packageLine =>
+      !packageLine.included
+    );
+
+  const rawFreight =
+    freightLines.reduce((sum, packageLine) => {
+      const amount =
+        skuFreightAmount(
+          packageLine.item,
+          Number(packageLine.qty) || 1
         );
 
-        if(appliedPerOrderRules.has(ruleID)){
+      return (
+        sum +
+        (
+          amount === null
+            ? 0
+            : amount
+        )
+      );
+    }, 0);
+
+  const automaticFreight =
+    roundCustomerFreight(
+      rawFreight
+    );
+
+    const actualFreightCost =
+    lineActualFreightCost(
+      parentLine
+    );
+
+  return actualFreightCost === null
+    ? automaticFreight
+    : roundCustomerFreight(
+        actualFreightCost
+      );
+}
+
+function freightSummary(){
+  let rows = [];
+  const debug = [];
+  const confirmations = [];
+  const appliedPerOrderRules = new Set();
+
+    /*
+    Calculate Yanmar attachment/accessory freight
+    separately for each visible product or package.
+    Required components follow their visible parent.
+  */
+  const yanmarPackages =
+    state.cart
+      .filter(parentLine =>
+        parentLine &&
+        parentLine.item &&
+        !parentLine.included &&
+        !parentLine.requiredItem
+      )
+      .map(parentLine => {
+        const parentSKU =
+          tightSku(
+            skuOf(parentLine.item)
+          );
+
+        const packageLines = [
+          parentLine,
+          ...state.cart.filter(childLine =>
+            childLine &&
+            childLine.item &&
+            childLine.requiredItem &&
+            !childLine.included &&
+            tightSku(childLine.parentSku) ===
+              parentSKU
+          )
+        ];
+
+        const freightLines =
+          packageLines.filter(packageLine =>
+            isYanmarAttachmentFreightGroup(
+              freightGroupOf(packageLine)
+            )
+          );
+
+        return {
+          parentLine,
+          freightLines
+        };
+      })
+      .filter(packageInfo =>
+        packageInfo.freightLines.length > 0
+      );
+
+  yanmarPackages.forEach(packageInfo => {
+    const parentLine =
+      packageInfo.parentLine;
+
+    const freightLines =
+      packageInfo.freightLines;
+
+    const dealerCost =
+      freightLines.reduce(
+        (sum, freightLine) =>
+          sum +
+          (
+            effectiveDealerCostOf(
+              freightLine.item
+            ) *
+            (Number(freightLine.qty) || 1)
+          ),
+        0
+      );
+
+    const rawFreight =
+      freightLines.reduce(
+        (sum, freightLine) => {
+          const amount =
+            skuFreightAmount(
+              freightLine.item,
+              Number(freightLine.qty) || 1
+            );
+
+          return (
+            sum +
+            (
+              amount === null
+                ? 0
+                : amount
+            )
+          );
+        },
+        0
+      );
+
+    const estimatedFreightCharge =
+      roundCustomerFreight(
+        rawFreight
+      );
+
+    const actualFreightCost =
+      lineActualFreightCost(
+        parentLine
+      );
+
+    const customerFreightCharge =
+      actualFreightCost === null
+        ? estimatedFreightCharge
+        : roundCustomerFreight(
+            actualFreightCost
+          );
+
+    if(customerFreightCharge > 0){
+      rows.push({
+        group:
+          freightGroupOf(
+            freightLines[0]
+          ),
+        qty:
+          Number(parentLine.qty) || 1,
+        amount:
+          customerFreightCharge,
+        label:
+          actualFreightCost === null
+            ? 'Estimated Freight Charge'
+            : 'Customer Freight Charge',
+        applyWhen:
+          'CustomerAttachmentFreight'
+      });
+    }
+
+    debug.push({
+      type:
+        'yanmar-package-freight',
+      parentSku:
+        skuOf(parentLine.item),
+      dealerCost,
+      rawFreight,
+      estimatedFreightCharge,
+      actualFreightCost,
+      customerFreightCharge,
+      policies:
+        freightLines.map(freightLine => ({
+          sku:
+            skuOf(freightLine.item),
+          rateType:
+            clean(
+              freightLine.item
+                .FreightRateType
+            ),
+          percent:
+            clean(
+              freightLine.item
+                .FreightPercent
+            ),
+          amount:
+            clean(
+              freightLine.item
+                .FreightAmount
+            )
+        }))
+    });
+  });
+  /*
+    Tarter orders of at least $6,000 dealer cost
+    receive free freight. Below $6,000 requires
+    confirmation because no automatic rule exists.
+  */
+  const tarterLines =
+    state.cart.filter(line =>
+      line &&
+      line.item &&
+      !line.included &&
+      isTarterFreightGroup(
+        freightGroupOf(line)
+      )
+    );
+
+  const tarterDealerCost =
+    tarterLines.reduce((sum, line) => {
+      const qty = Number(line.qty) || 1;
+
+      return (
+        sum +
+        (
+          effectiveDealerCostOf(line.item) *
+          qty
+        )
+      );
+    }, 0);
+
+    const visibleTarterLines =
+    tarterLines.filter(line =>
+      !line.requiredItem
+    );
+
+  const tarterLinesWithoutActualFreight =
+    visibleTarterLines.filter(line =>
+      lineActualFreightCost(line) === null
+    );
+
+  visibleTarterLines.forEach(line => {
+    const actualFreightCost =
+      lineActualFreightCost(line);
+
+    if(actualFreightCost === null){
+      return;
+    }
+
+    const customerFreightCharge =
+      roundCustomerFreight(
+        actualFreightCost
+      );
+
+    if(customerFreightCharge > 0){
+      rows.push({
+        group:
+          freightGroupOf(line),
+        qty:
+          Number(line.qty) || 1,
+        amount:
+          customerFreightCharge,
+        label:
+          'Customer Freight Charge',
+        applyWhen:
+          'AllSales'
+      });
+    }
+  });
+
+  if(
+    tarterLinesWithoutActualFreight.length > 0 &&
+    tarterDealerCost < 6000
+  ){
+    confirmations.push(
+      'Tarter freight requires confirmation for orders below $6,000 dealer cost.'
+    );
+  }
+
+  debug.push({
+    type: 'tarter-freight',
+    dealerCost: tarterDealerCost,
+    freightIncluded:
+      visibleTarterLines.length > 0 &&
+      tarterDealerCost >= 6000 &&
+      tarterLinesWithoutActualFreight.length > 0,
+    confirmationRequired:
+      tarterLinesWithoutActualFreight.length > 0 &&
+      tarterDealerCost < 6000,
+    actualFreight:
+      visibleTarterLines.map(line => ({
+        sku:
+          skuOf(line.item),
+        actualFreightCost:
+          lineActualFreightCost(line),
+        customerFreightCharge:
+          lineActualFreightCost(line) === null
+            ? null
+            : roundCustomerFreight(
+                lineActualFreightCost(line)
+              )
+      }))
+  });
+
+  /*
+    Preserve all existing fixed tractor, UTV, ZTR
+    and power-equipment freight rules. Yanmar
+    attachment/accessory and Tarter rules are handled
+    above and are excluded from this generic section.
+  */
+  state.cart.forEach(line => {
+    if(
+      !line ||
+      !line.item ||
+      line.included
+    ){
+      return;
+    }
+
+    const group =
+      freightGroupOf(line);
+
+    if(
+      isYanmarAttachmentFreightGroup(group) ||
+      isTarterFreightGroup(group)
+    ){
+      return;
+    }
+
+        const qty =
+      Number(line.qty) || 1;
+
+        const actualFreightCost =
+      lineActualFreightCost(line);
+
+    if(actualFreightCost !== null){
+      const customerFreightCharge =
+        roundCustomerFreight(
+          actualFreightCost
+        );
+
+      if(customerFreightCharge > 0){
+        rows.push({
+          group,
+          qty,
+          amount:
+            customerFreightCharge,
+          label:
+            'Customer Freight Charge',
+          applyWhen: 'AllSales'
+        });
+      }
+
+      debug.push({
+        model: clean(line.item.Model),
+        sku: skuOf(line.item),
+        group,
+        qty,
+        source:
+          'Actual freight cost',
+        actualFreightCost,
+        customerFreightCharge
+      });
+
+      return;
+    }
+
+    const skuFreight =
+      skuFreightAmount(
+        line.item,
+        qty
+      );
+
+    if(skuFreight !== null){
+      if(skuFreight > 0){
+        rows.push({
+          group,
+          qty,
+          amount: skuFreight,
+          label: 'Factory Freight',
+          applyWhen: 'AllSales'
+        });
+      }
+
+      debug.push({
+        model: clean(line.item.Model),
+        sku: skuOf(line.item),
+        group,
+        qty,
+        source: 'SKU freight policy',
+        rateType:
+          clean(line.item.FreightRateType),
+        percent:
+          clean(line.item.FreightPercent),
+        freightAmount:
+          clean(line.item.FreightAmount),
+        amount: skuFreight
+      });
+
+      return;
+    }
+
+    const matchingRules =
+      state.freightRules.filter(rule => {
+        if(
+          !freightRuleMatchesGroup(
+            rule,
+            group
+          )
+        ){
           return false;
         }
 
-        appliedPerOrderRules.add(ruleID);
-        return true;
+        const ruleType =
+          freightKey(
+            rule.RuleType ||
+            rule.ChargeType
+          );
+
+        const ruleQty =
+          ruleType === 'FIXEDPERORDER'
+            ? state.cart.reduce(
+                (sum, candidate) => {
+                  if(
+                    !candidate ||
+                    !candidate.item ||
+                    candidate.included ||
+                    lineIsInStock(candidate) ||
+                    !freightRuleMatchesGroup(
+                      rule,
+                      freightGroupOf(candidate)
+                    )
+                  ){
+                    return sum;
+                  }
+
+                  return (
+                    sum +
+                    (Number(candidate.qty) || 1)
+                  );
+                },
+                0
+              )
+            : qty;
+
+        return (
+          freightQtyMatches(
+            rule,
+            ruleQty
+          ) &&
+          freightApplyWhenMatches(
+            rule,
+            {
+              group,
+              qty: ruleQty,
+              lines: [line]
+            }
+          )
+        );
       });
 
-    const amount = pricedMatches.reduce(
-      (sum, match) => sum + match.amount,
-      0
-    );
+    const pricedMatches =
+      matchingRules
+        .map(rule => ({
+          rule,
+          amount:
+            freightAmountForRule(
+              rule,
+              qty,
+              line.item
+            )
+        }))
+        .filter(match => {
+          const ruleType =
+            freightKey(
+              match.rule.RuleType ||
+              match.rule.ChargeType
+            );
+
+          if(
+            ruleType !==
+            'FIXEDPERORDER'
+          ){
+            return true;
+          }
+
+          const ruleID =
+            freightKey(
+              match.rule.RuleID ||
+              match.rule.RuleName ||
+              match.rule.DisplayLabel
+            );
+
+          if(
+            appliedPerOrderRules.has(
+              ruleID
+            )
+          ){
+            return false;
+          }
+
+          appliedPerOrderRules.add(
+            ruleID
+          );
+
+          return true;
+        });
+
+    const amount =
+      pricedMatches.reduce(
+        (sum, match) =>
+          sum + match.amount,
+        0
+      );
 
     debug.push({
       model: clean(line.item.Model),
       group,
       qty,
-      nm: clean(line.item.QtyNewMilford),
-      db: clean(line.item.QtyDanbury),
-      rulesLoaded: state.freightRules.length,
-      matchingRules: matchingRules.length,
+      nm: clean(
+        line.item.QtyNewMilford
+      ),
+      db: clean(
+        line.item.QtyDanbury
+      ),
+      rulesLoaded:
+        state.freightRules.length,
+      matchingRules:
+        matchingRules.length,
       amount
     });
 
-    if(amount > 0){
-      total += amount;
-      pricedMatches.forEach(match => {
-        if(match.amount <= 0) return;
+    pricedMatches.forEach(match => {
+      if(match.amount <= 0){
+        return;
+      }
 
-        rows.push({
-          group,
-          qty,
-          amount: match.amount,
-          label:
-            clean(match.rule.DisplayLabel) ||
-            clean(match.rule.RuleName) ||
-            'Freight / Surcharge',
-          applyWhen: clean(match.rule.ApplyWhen)
-        });
+      rows.push({
+        group,
+        qty,
+        amount: match.amount,
+        label:
+          clean(
+            match.rule.DisplayLabel
+          ) ||
+          clean(
+            match.rule.RuleName
+          ) ||
+          'Freight / Surcharge',
+        applyWhen:
+          clean(
+            match.rule.ApplyWhen
+          )
       });
-    }
+    });
   });
 
-  window.stihlFreightDebug = debug;
+  const total =
+    rows.reduce(
+      (sum, row) =>
+        sum + money(row.amount),
+      0
+    );
 
-  return { total, rows, debug };
+    if(
+    document.body.classList.contains(
+      'dealer-mode'
+    )
+  ){
+    window.stihlFreightDebug = {
+      rows,
+      confirmations,
+      debug
+    };
+  }else{
+    delete window.stihlFreightDebug;
+  }
+
+  return {
+    total,
+    rows,
+    confirmations,
+    debug
+  };
 }
 
 function freightFee(){
@@ -12032,7 +12714,7 @@ function renderFreightDisplay(){
   const freight = freightSummary();
 
   const factoryTotal = freight.rows
-    .filter(r => ['ALLSALES', 'ALWAYS'].includes(freightKey(r.applyWhen)))
+    .filter(r => freightKey(r.applyWhen) !== 'NOTINSTOCK')
     .reduce((sum,r) => sum + r.amount, 0);
 
   const specialTotal = freight.rows
@@ -12069,30 +12751,89 @@ if($('stihl-customer-freight-display')){
 }
 
   if($('stihl-freight-detail')){
-    $('stihl-freight-detail').innerHTML =
-      freight.rows.length
-        ? freight.rows.map(r =>
-            `${escapeHtml(r.label)}: ${fmtMoney(r.amount)}`
-          ).join('<br>')
-        : 'No freight charge applied.';
-  }
+  const freightDetails =
+    freight.rows.map(row =>
+      `${escapeHtml(row.label)}: ${fmtMoney(row.amount)}`
+    );
+
+  const confirmations =
+    (freight.confirmations || []).map(message =>
+      `<strong style="color:#b00020;">${escapeHtml(message)}</strong>`
+    );
+
+  $('stihl-freight-detail').innerHTML =
+    [...freightDetails, ...confirmations].length
+      ? [...freightDetails, ...confirmations].join('<br>')
+      : 'No freight charge applied.';
+}
 }
 
 function deliveryLabel(){
   return clean($('stihl-delivery-choice')?.value);
 }
+
+function assemblyOptionCode(item){
+  return clean(
+    item?.AssemblyOption
+  ).toUpperCase();
+}
+
+function assemblyOptionIsValid(item){
+  return ['T', 'F'].includes(
+    assemblyOptionCode(item)
+  );
+}
+
+function assemblyIsMandatory(item){
+  return assemblyOptionCode(item) === 'T';
+}
+
+function assemblyIsOptional(item){
+  return assemblyOptionCode(item) === 'F';
+}
+
+function setupChargeApplies(line){
+  if(
+    !line ||
+    !line.item ||
+    line.included
+  ){
+    return false;
+  }
+
+  if(assemblyIsMandatory(line.item)){
+    return true;
+  }
+
+  if(assemblyIsOptional(line.item)){
+    return !!line.setupSelected;
+  }
+
+  return false;
+}
+
 function setupFee(){
-  return state.cart.reduce((sum, line) => {
-    if(!line.item) return sum;
-    if(!line.setupSelected) return sum;
+  return state.cart.reduce(
+    (sum, line) => {
+      if(!setupChargeApplies(line)){
+        return sum;
+      }
 
-    const amount = money(line.item.AssemblyAmount);
-    const allowed = isTrue(line.item.AssemblyOption);
+      const amount =
+        money(
+          line.item.AssemblyAmount
+        );
 
-    if(!allowed || amount <= 0) return sum;
-
-    return sum + (amount * (Number(line.qty) || 1));
-  }, 0);
+      return (
+        sum +
+        (
+          amount *
+          (Number(line.qty) || 1)
+        )
+      );
+    },
+    0
+  );
 }
 
 function tradeAllowance(){
@@ -13081,9 +13822,7 @@ rebateDescription: rebateDescription(),
 rebateEndDate: rebateEndDate(), 
    setup: state.cart
   .filter(line =>
-    line.setupSelected &&
-    isTrue(line.item?.AssemblyOption) &&
-    money(line.item?.AssemblyAmount) > 0
+    setupChargeApplies(line)
   )
   .map(line =>
     `${nameOf(line.item)} (${line.qty}) = ${fmtMoney(
@@ -15274,7 +16013,10 @@ function addRequiredItems(parentItem, parentQty){
     });
   }
 
-  if(hasNestedRequirementBranches(parentItem)){
+  if(
+    requiredNumbers.length > 1 ||
+    hasNestedRequirementBranches(parentItem)
+  ){
     const matchingBranch = requiredNumbers.find(branchMatchesSelectedTool);
 
     if(Number.isInteger(matchingBranch)){
@@ -15322,10 +16064,10 @@ function addRequiredItems(parentItem, parentQty){
   note: note || '',
   included: !!included,
   requiredItem: !!requiredItem,
-  parentSku: parentSku || '',
+    parentSku: parentSku || '',
+  actualFreightCost: '',
   setupSelected:
-    isTrue(item.AssemblyOption) &&
-    money(item.AssemblyAmount) > 0 &&
+    assemblyOptionIsValid(item) &&
     !included
 });
   }
@@ -15987,15 +16729,29 @@ if(specialOrderFreightBox){
           : skuOf(line.item);
 
       const setupFee =
-        money(line.item.AssemblyAmount) * (Number(line.qty) || 1);
+  [line, ...childItems].reduce(
+    (sum, packageLine) => {
+      if(!setupChargeApplies(packageLine)){
+        return sum;
+      }
 
-      const setupAmount =
-        line.setupSelected ? setupFee : 0;
+      return (
+        sum +
+        (
+          money(
+            packageLine.item.AssemblyAmount
+          ) *
+          (Number(packageLine.qty) || 1)
+        )
+      );
+    },
+    0
+  );
 
-      const packageTotal =
+const packageTotal =
   line.included
     ? 0
-    : lineTotal(line) + childTotal + setupAmount;
+    : lineTotal(line) + childTotal;
 
 /*
   Combine the visible parent item and any required
@@ -16079,7 +16835,7 @@ const cartPackageSubtotal =
       );
 
     const cartSetupAmount =
-      cartLine.setupSelected
+      setupChargeApplies(cartLine)
         ? money(cartLine.item.AssemblyAmount) *
           (Number(cartLine.qty) || 1)
         : 0;
@@ -16198,9 +16954,72 @@ const replacementControls = childItems
   .filter(Boolean)
   .join('');
 
+const tarterOrderDealerCost =
+  state.cart
+    .filter(cartLine =>
+      cartLine &&
+      cartLine.item &&
+      !cartLine.included &&
+      isTarterFreightGroup(
+        freightGroupOf(cartLine)
+      )
+    )
+    .reduce((sum, cartLine) =>
+      sum +
+      (
+        effectiveDealerCostOf(
+          cartLine.item
+        ) *
+        (Number(cartLine.qty) || 1)
+      ),
+      0
+    );
+
+const yanmarPackageFreight =
+  automaticYanmarPackageFreight(
+    line
+  );
+
+  const packageActualFreightCost =
+  lineActualFreightCost(line);
+
+const packageActualFreightCharge =
+  packageActualFreightCost === null
+    ? null
+    : roundCustomerFreight(
+        packageActualFreightCost
+      );
+
+const packageFreightNeedsConfirmation =
+  !line.included &&
+  isTarterFreightGroup(
+    freightGroupOf(line)
+  ) &&
+  packageActualFreightCost === null &&
+  tarterOrderDealerCost < 6000;
+
+const packageFreightNotice =
+  !line.included &&
+  isTarterFreightGroup(
+    freightGroupOf(line)
+  )
+        ? packageActualFreightCharge !== null
+      ? `A ${fmtMoney(
+          packageActualFreightCharge
+        )} Factory Freight Charge Applies`
+      : tarterOrderDealerCost >= 6000
+        ? 'No Factory Freight Charge Applies'
+        : 'Factory Freight Must Be Confirmed'
+    : yanmarPackageFreight > 0
+      ? `A ${fmtMoney(
+          yanmarPackageFreight
+        )} Factory Freight Charge Applies`
+      : '';
+
       const includedTooltip =
   childItems.length ||
-  isTrue(line.item.AssemblyOption) ||
+  assemblyOptionIsValid(line.item) ||
+  packageFreightNotice ||
   packageFactorySaleSavings > 0 ||
   packageCustomerRebate > 0 ||
   packageManualDiscount > 0 ||
@@ -16222,7 +17041,36 @@ const replacementControls = childItems
               box-shadow:0 6px 18px rgba(0,0,0,.25);
             ">
 
-              <strong>Package Details</strong>
+              <div style="
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+">
+  <strong>Package Details</strong>
+
+  <button
+    type="button"
+    class="stihl-package-details-close"
+    aria-label="Close Package Details"
+    title="Close"
+    style="
+      width:24px;
+      height:24px;
+      padding:0;
+      border:1px solid rgba(255,255,255,.65);
+      border-radius:999px;
+      background:transparent;
+      color:#fff;
+      font-size:18px;
+      font-weight:900;
+      line-height:20px;
+      cursor:pointer;
+    "
+  >
+    &times;
+  </button>
+</div>
 
               <div style="margin-top:7px;">
                 <div style="
@@ -16256,40 +17104,102 @@ const replacementControls = childItems
                   `).join('')}
                 </div>
 
-                ${isTrue(line.item.AssemblyOption) ? `
-                  <div style="
-                    margin-top:7px;
-                    padding-top:7px;
-                    border-top:1px solid rgba(255,255,255,.25);
-                    display:grid;
-                    grid-template-columns:1fr auto;
-                    gap:8px;
-                    align-items:center;
-                  ">
-                    <div>
-                      <strong>SERVICE</strong>
-                      Dealer Setup / Install
-                    </div>
+${(
+  assemblyOptionIsValid(line.item) ||
+  packageFreightNotice
+) ? `
+  <div style="
+    margin-top:8px;
+    padding-top:8px;
+    border-top:1px solid rgba(255,255,255,.35);
+    font-weight:900;
+  ">
+    Additional Charges & Fees
+  </div>
+` : ''}
 
-                    ${setupFee > 0 ? `
-                      <label style="
-                        display:flex;
-                        align-items:center;
-                        gap:6px;
-                        white-space:nowrap;
-                      ">
-                        ${line.setupSelected ? fmtMoney(setupFee) : '$0.00'}
-                        <input
-                          type="checkbox"
-                          data-setup-index="${cartIndex}"
-                          ${line.setupSelected ? 'checked' : ''}
-                          style="width:16px;height:16px;margin:0;">
-                      </label>
-                    ` : `
-                      <strong>No Additional Charge</strong>
-                    `}
-                  </div>
-                ` : ''}
+                ${assemblyOptionIsValid(line.item) ? `
+  <div style="
+    margin-top:7px;
+    padding-top:7px;
+    border-top:1px solid rgba(255,255,255,.25);
+    display:grid;
+    grid-template-columns:1fr auto;
+    gap:8px;
+    align-items:center;
+  ">
+    <div>
+      <strong>SERVICE</strong>
+      Dealer Setup / Install
+    </div>
+
+    ${assemblyIsMandatory(line.item) ? `
+      <strong style="
+        text-align:right;
+        white-space:nowrap;
+      ">
+        ${fmtMoney(setupFee)}
+        <span style="
+          display:block;
+          font-size:10px;
+          color:#ddd;
+        ">
+          Required
+        </span>
+      </strong>
+    ` : `
+      <label style="
+        display:flex;
+        align-items:center;
+        gap:6px;
+        white-space:nowrap;
+      ">
+        ${line.setupSelected
+          ? fmtMoney(setupFee)
+          : '$0.00'}
+        <input
+          type="checkbox"
+          data-setup-index="${cartIndex}"
+          ${line.setupSelected
+            ? 'checked'
+            : ''}
+          style="
+            width:16px;
+            height:16px;
+            margin:0;
+          "
+        >
+      </label>
+    `}
+
+    </div>
+` : ''}
+
+${packageFreightNotice ? `
+  <div style="
+    margin-top:7px;
+    display:grid;
+    grid-template-columns:1fr auto;
+    gap:8px;
+    align-items:center;
+  ">
+    <div>
+      <strong>FREIGHT</strong>
+      Factory Freight
+    </div>
+
+    <strong style="
+      text-align:right;
+      color:${
+        packageFreightNeedsConfirmation
+          ? '#ffd27a'
+          : '#9ee6ad'
+      };
+    ">
+      ${escapeHtml(packageFreightNotice)}
+    </strong>
+  </div>
+` : ''}
 
               </div>
             </div>
@@ -16451,60 +17361,116 @@ const replacementControls = childItems
           ` : ''}
 
           ${document.body.classList.contains('dealer-mode') && !line.included ? `
-            <div style="
-              margin-top:8px;
-              padding:8px;
-              border:1px solid #d6eadb;
-              border-radius:10px;
-              background:#f3fbf5;
+  <div style="
+    margin-top:8px;
+    padding:8px;
+    border:1px solid #d6eadb;
+    border-radius:10px;
+    background:#f3fbf5;
+    display:grid;
+    grid-template-columns:minmax(0,1.5fr) minmax(180px,1fr);
+    gap:12px;
+    align-items:start;
+  ">
+    <div>
+      <label>Line Discount</label>
+
+      <div style="
+        display:grid;
+        grid-template-columns:1fr 1fr;
+        gap:8px;
+      ">
+        <select data-line-discount-type="${cartIndex}">
+          <option value="">No Discount</option>
+          <option
+            value="dollar"
+            ${line.discountType === 'dollar' ? 'selected' : ''}
+          >
+            Dollar Discount
+          </option>
+          <option
+            value="percent"
+            ${line.discountType === 'percent' ? 'selected' : ''}
+          >
+            Percent Discount
+          </option>
+        </select>
+
+        <div style="position:relative;">
+          <input
+            type="number"
+            min="0"
+            ${line.discountType === 'percent' ? 'max="100"' : ''}
+            step="0.01"
+            value="${escapeHtml(clean(line.discountValue || ''))}"
+            placeholder="${
+              line.discountType === 'percent'
+                ? 'Enter Percentage'
+                : 'Enter Amount'
+            }"
+            data-line-discount-value="${cartIndex}"
+            style="${
+              line.discountType === 'percent'
+                ? 'padding-right:30px;'
+                : ''
+            }"
+          >
+
+          ${line.discountType === 'percent' ? `
+            <span style="
+              position:absolute;
+              right:12px;
+              top:50%;
+              transform:translateY(-50%);
+              font-weight:900;
+              pointer-events:none;
+              color:#555;
             ">
-              <label>Line Discount</label>
-
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                <select data-line-discount-type="${cartIndex}">
-                  <option value="">No Discount</option>
-<option value="dollar" ${line.discountType === 'dollar' ? 'selected' : ''}>Dollar Discount</option>
-<option value="percent" ${line.discountType === 'percent' ? 'selected' : ''}>Percent Discount</option>
-                </select>
-
-                <div style="position:relative;">
-
-  <input
-    type="number"
-    min="0"
-    ${line.discountType === 'percent' ? 'max="100"' : ''}
-    step="${line.discountType === 'percent' ? '0.01' : '0.01'}"
-    value="${escapeHtml(clean(line.discountValue || ''))}"
-    placeholder="${
-  line.discountType === 'percent'
-    ? 'Enter Percentage'
-    : 'Enter Amount'
-}"
-    data-line-discount-value="${cartIndex}"
-    style="${
-      line.discountType === 'percent'
-        ? 'padding-right:30px;'
-        : ''
-    }">
-
-  ${line.discountType === 'percent' ? `
-    <span style="
-      position:absolute;
-      right:12px;
-      top:50%;
-      transform:translateY(-50%);
-      font-weight:900;
-      pointer-events:none;
-      color:#555;
-    ">
-      %
-    </span>
-  ` : ''}
-
-</div>
-              </div>
-            </div>
+              %
+            </span>
           ` : ''}
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <label>Enter Actual Freight Amount</label>
+
+      <div style="position:relative;">
+        <span style="
+          position:absolute;
+          left:12px;
+          top:50%;
+          transform:translateY(-50%);
+          font-weight:900;
+          pointer-events:none;
+          color:#555;
+          z-index:1;
+        ">
+          $
+        </span>
+
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          inputmode="decimal"
+          value="${
+            line.actualFreightCost === '' ||
+            line.actualFreightCost == null
+              ? ''
+              : Number(
+                  line.actualFreightCost
+                ).toFixed(2)
+          }"
+          placeholder="0.00"
+          data-line-actual-freight="${cartIndex}"
+          style="padding-left:28px;width:100%;"
+        >
+      </div>
+    </div>
+  </div>
+` : ''}
 
         </div>
       `;
@@ -16543,23 +17509,41 @@ renderCart();
   });
 
   lines.querySelectorAll('.stihl-info-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const tip = btn.parentElement.querySelector('.stihl-included-tooltip');
-      if(tip){
-        tip.style.display = tip.style.display === 'block' ? 'none' : 'block';
-      }
-    });
+  btn.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
 
-    btn.addEventListener('mouseenter', () => {
-      const tip = btn.parentElement.querySelector('.stihl-included-tooltip');
-      if(tip) tip.style.display = 'block';
-    });
+    const tip =
+      btn.parentElement.querySelector(
+        '.stihl-included-tooltip'
+      );
 
-    btn.parentElement.addEventListener('mouseleave', () => {
-      const tip = btn.parentElement.querySelector('.stihl-included-tooltip');
-      if(tip) tip.style.display = 'none';
-    });
+    if(tip){
+      tip.style.display = 'block';
+    }
   });
+});
+
+lines.querySelectorAll(
+  '.stihl-package-details-close'
+).forEach(closeButton => {
+  closeButton.addEventListener(
+    'click',
+    event => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const tip =
+        closeButton.closest(
+          '.stihl-included-tooltip'
+        );
+
+      if(tip){
+        tip.style.display = 'none';
+      }
+    }
+  );
+});
 
   lines.querySelectorAll('[data-setup-index]').forEach(box => {
     box.addEventListener('change', () => {
@@ -16601,10 +17585,10 @@ renderCart();
   });
 });
 
-  lines.querySelectorAll('[data-line-discount-value]').forEach(el => {
-
+  lines.querySelectorAll(
+  '[data-line-discount-value]'
+).forEach(el => {
   el.addEventListener('change', () => {
-
     const idx =
       Number(
         el.getAttribute(
@@ -16613,7 +17597,6 @@ renderCart();
       );
 
     if(state.cart[idx]){
-
       let enteredValue =
         money(el.value);
 
@@ -16630,6 +17613,34 @@ renderCart();
 
       state.cart[idx].discountValue =
         enteredValue;
+    }
+
+    renderCart();
+  });
+});
+
+lines.querySelectorAll(
+  '[data-line-actual-freight]'
+).forEach(input => {
+  input.addEventListener('change', () => {
+    const idx =
+      Number(
+        input.getAttribute(
+          'data-line-actual-freight'
+        )
+      );
+
+    if(state.cart[idx]){
+      const raw =
+        clean(input.value);
+
+      state.cart[idx].actualFreightCost =
+        raw === ''
+          ? ''
+          : Math.max(
+              Number(raw) || 0,
+              0
+            );
     }
 
     renderCart();
@@ -16766,9 +17777,13 @@ const totalDealerReimbursementForProfit =
       : 0
   );
 
+const internalFreightCostForProfit =
+  cartInternalFreightCostTotal();
+
 const netDealerCostForProfit =
   Math.max(
-    cartTrueDealerCostTotal() -
+    cartTrueDealerCostTotal() +
+    internalFreightCostForProfit -
     totalDealerReimbursementForProfit,
     0
   );
@@ -17389,6 +18404,13 @@ if($('stihl-advertising-fee-display')){
     fmtMoney(dealer.advertisingFee);
 }
 
+if($('stihl-internal-freight-cost-display')){
+  $('stihl-internal-freight-cost-display').textContent =
+    fmtMoney(
+      dealer.internalFreightCost
+    );
+}
+
 if($('stihl-true-dealer-cost-display')){
   $('stihl-true-dealer-cost-display').textContent =
     fmtMoney(dealer.trueDealerCost);
@@ -17409,9 +18431,10 @@ if($('stihl-net-dealer-cost-display')){
         : 0
     );
 
-  const netDealerCost =
+    const netDealerCost =
     Math.max(
-      cartTrueDealerCostTotal() -
+      cartTrueDealerCostTotal() +
+      cartInternalFreightCostTotal() -
       totalDealerReimbursementForNetCost,
       0
     );
