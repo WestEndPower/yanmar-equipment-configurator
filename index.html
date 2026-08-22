@@ -12003,7 +12003,7 @@ function skuFreightAmount(item, qty = 1){
     );
   }
 
-  if(rateType === 'PERCENT'){
+    if(rateType === 'PERCENT'){
     const enteredPercent =
       Number(item.FreightPercent);
 
@@ -12019,10 +12019,25 @@ function skuFreightAmount(item, qty = 1){
         ? enteredPercent
         : enteredPercent / 100;
 
+    const dealerCost =
+      effectiveDealerCostOf(item);
+
+    if(dealerCost > 0){
+      return (
+        dealerCost *
+        quantity *
+        decimalRate
+      );
+    }
+
+    /*
+      Public data does not contain Dealer Cost.
+      FreightAmount stores the precomputed raw
+      percentage-freight estimate for public use.
+    */
     return (
-      effectiveDealerCostOf(item) *
-      quantity *
-      decimalRate
+      money(item.FreightAmount) *
+      quantity
     );
   }
 
