@@ -1888,6 +1888,13 @@ if(request.method === "POST"){
 
   if(
     url.pathname ===
+    "/quote-lead"
+  ){
+    maxRequests = 5;
+  }
+
+  if(
+    url.pathname ===
     "/shipping-rate"
   ){
     maxRequests = 30;
@@ -2359,10 +2366,222 @@ if (url.pathname !== "/quote-lead") {
   );
 }
 
-    const quote = await request.json();
+        const quoteContentType =
+      String(
+        request.headers.get(
+          "Content-Type"
+        ) || ""
+      )
+        .split(";")[0]
+        .trim()
+        .toLowerCase();
 
+    if(quoteContentType !== "application/json"){
+      return Response.json(
+        {
+          error:
+            "Content-Type must be application/json."
+        },
+        {
+          status: 415,
+          headers: corsHeaders
+        }
+      );
+    }
+
+    const maximumQuoteRequestBytes =
+      30 * 1024 * 1024;
+
+    const statedQuoteRequestBytes =
+      Number(
+        request.headers.get(
+          "Content-Length"
+        ) || 0
+      );
+
+    if(
+      statedQuoteRequestBytes >
+      maximumQuoteRequestBytes
+    ){
+      return Response.json(
+        {
+          error:
+            "Quote request is too large."
+        },
+        {
+          status: 413,
+          headers: corsHeaders
+        }
+      );
+    }
+
+    const rawQuote =
+      await request.text();
+
+    const actualQuoteRequestBytes =
+      new TextEncoder()
+        .encode(rawQuote)
+        .byteLength;
+
+    if(
+      actualQuoteRequestBytes >
+      maximumQuoteRequestBytes
+    ){
+      return Response.json(
+        {
+          error:
+            "Quote request is too large."
+        },
+        {
+          status: 413,
+          headers: corsHeaders
+        }
+      );
+    }
+
+    let quote;
+
+    try{
+      quote =
+        JSON.parse(rawQuote);
+    }catch(_error){
+      return Response.json(
+        {
+          error:
+            "Quote request contains invalid JSON."
+        },
+        {
+          status: 400,
+          headers: corsHeaders
+        }
+      );
+    }
+
+    if(
+      !quote ||
+      typeof quote !== "object" ||
+      Array.isArray(quote)
+    ){
+      return Response.json(
+        {
+          error:
+            "Quote request must contain an object."
+        },
+        {
+          status: 400,
+          headers: corsHeaders
+        }
+      );
+    }
+
+    const quoteTradePhotos =
+      Array.isArray(quote?.trade?.photos)
+        ? quote.trade.photos
+        : [];
+
+    if(quoteTradePhotos.length > 8){
+      return Response.json(
+        {
+          error:
+            "A maximum of 8 trade-in photos is allowed."
+        },
+        {
+          status: 400,
+          headers: corsHeaders
+        }
+      );
+    }
+
+    let totalTradePhotoBytes = 0;
+
+    for(const photo of quoteTradePhotos){
+      const filename =
+        String(photo?.filename || "");
+
+      const content =
+        String(photo?.content || "");
+
+      if(
+        !filename ||
+        filename.length > 160 ||
+        !content ||
+        content.length % 4 !== 0 ||
+        !/^[A-Za-z0-9+/]*={0,2}$/.test(content)
+      ){
+        return Response.json(
+          {
+            error:
+              "A trade-in photo is invalid."
+          },
+          {
+            status: 400,
+            headers: corsHeaders
+          }
+        );
+      }
+
+      const padding =
+        content.endsWith("==")
+          ? 2
+          : content.endsWith("=")
+            ? 1
+            : 0;
+
+      const photoBytes =
+        Math.floor(
+          content.length * 3 / 4
+        ) - padding;
+
+      if(photoBytes > 5 * 1024 * 1024){
+        return Response.json(
+          {
+            error:
+              "Each trade-in photo must be 5 MB or smaller."
+          },
+          {
+            status: 413,
+            headers: corsHeaders
+          }
+        );
+      }
+
+      totalTradePhotoBytes += photoBytes;
+    }
+
+    if(totalTradePhotoBytes > 20 * 1024 * 1024){
+      return Response.json(
+        {
+          error:
+            "Trade-in photos must total 20 MB or less."
+        },
+        {
+          status: 413,
+          headers: corsHeaders
+        }
+      );
+    }
     const configurator = quote.configurator || "Configurator";
-    const quoteNumber = quote.quoteNumber || "";
+        const quoteNumber =
+      String(
+        quote.quoteNumber || ""
+      ).trim();
+
+    if(
+      !/^[A-Za-z0-9_-]{1,80}$/.test(
+        quoteNumber
+      )
+    ){
+      return Response.json(
+        {
+          error:
+            "Quote number is invalid."
+        },
+        {
+          status: 400,
+          headers: corsHeaders
+        }
+      );
+    }
     const action = quote.action || "Print / Save PDF";
     const customer = quote.customer || "No customer entered";
     const total = quote.total || "No total";
@@ -2515,9 +2734,31 @@ ${tradeHtml}
         }))
     : [];
 
+        const quoteForStorage = {
+      ...quote,
+
+      trade:
+        trade
+          ? {
+              ...trade,
+
+              photos:
+                Array.isArray(trade.photos)
+                  ? trade.photos.map(photo => ({
+                      filename:
+                        String(
+                          photo?.filename ||
+                          ""
+                        )
+                    }))
+                  : []
+            }
+          : null
+    };
+
     try {
   await env.QUOTES_DB.prepare(`
-    INSERT OR REPLACE INTO quotes (
+    INSERT INTO quotes (
       quote_number,
       created_at,
       configurator,
@@ -2559,10 +2800,44 @@ ${tradeHtml}
     quote.tax || "",
     total,
     "Open",
-    JSON.stringify(quote)
+    JSON.stringify(quoteForStorage)
   ).run();
 } catch (dbError) {
-  console.log("Quote database save failed:", dbError);
+  console.log(
+    "Quote database save failed:",
+    dbError
+  );
+
+  const databaseMessage =
+    String(dbError?.message || "");
+
+  if(
+    databaseMessage
+      .toLowerCase()
+      .includes("unique constraint")
+  ){
+    return Response.json(
+      {
+        error:
+          "This quote number already exists."
+      },
+      {
+        status: 409,
+        headers: corsHeaders
+      }
+    );
+  }
+
+  return Response.json(
+    {
+      error:
+        "Unable to save the quote."
+    },
+    {
+      status: 500,
+      headers: corsHeaders
+    }
+  );
 }
 
     const resendResponse = await fetch("https://api.resend.com/emails", {
@@ -2582,10 +2857,21 @@ ${tradeHtml}
 
     const data = await resendResponse.json();
 
-    if (!resendResponse.ok) {
+        if(!resendResponse.ok){
+      console.log(
+        "Quote email delivery failed:",
+        data
+      );
+
       return Response.json(
-        { error: "Email failed", details: data },
-        { status: 500, headers: corsHeaders }
+        {
+          error:
+            "Unable to deliver the quote email."
+        },
+        {
+          status: 500,
+          headers: corsHeaders
+        }
       );
     }
 
