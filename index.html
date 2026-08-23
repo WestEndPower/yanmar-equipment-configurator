@@ -12443,16 +12443,7 @@ function automaticYanmarPackageFreight(parentLine){
       rawFreight
     );
 
-    const actualFreightCost =
-    lineActualFreightCost(
-      parentLine
-    );
-
-  return actualFreightCost === null
-    ? automaticFreight
-    : roundCustomerFreight(
-        actualFreightCost
-      );
+  return automaticFreight;
 }
 
 function freightSummary(){
@@ -12552,17 +12543,13 @@ function freightSummary(){
         rawFreight
       );
 
-    const actualFreightCost =
-      lineActualFreightCost(
-        parentLine
-      );
-
+    /*
+      Package-component freight is calculated only from its component
+      rules. A manual actual-freight entry belongs to the visible parent
+      equipment line and is handled once by the generic freight section.
+    */
     const customerFreightCharge =
-      actualFreightCost === null
-        ? estimatedFreightCharge
-        : roundCustomerFreight(
-            actualFreightCost
-          );
+      estimatedFreightCharge;
 
     if(customerFreightCharge > 0){
       rows.push({
@@ -12575,9 +12562,7 @@ function freightSummary(){
         amount:
           customerFreightCharge,
         label:
-          actualFreightCost === null
-            ? 'Estimated Freight Charge'
-            : 'Customer Freight Charge',
+          'Estimated Freight Charge',
         applyWhen:
           'CustomerAttachmentFreight'
       });
@@ -12591,7 +12576,6 @@ function freightSummary(){
       dealerCost,
       rawFreight,
       estimatedFreightCharge,
-      actualFreightCost,
       customerFreightCharge,
       policies:
         freightLines.map(freightLine => ({
@@ -16793,6 +16777,10 @@ function dealerRebateAmount(){
     );
 
   if(bidFleetActive){
+    return 0;
+  }
+
+  if(!selectedProgramAllowsRebate()){
     return 0;
   }
 

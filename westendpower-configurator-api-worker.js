@@ -1000,7 +1000,7 @@ function privatePricingFinanceProgramApplies(
 
   /*
     Finance eligibility uses either minimum profit
-    or maximum dealer feeâ€”not both.
+    or maximum dealer fee—not both.
 
     MinimumProfitAmount greater than zero takes
     priority. When no minimum profit is set, an
@@ -1092,12 +1092,10 @@ function privatePricingFinanceProgramApplies(
       dealerCost +
       advertisingFee;
 
-        /*
-      Customer rebate compatibility does not remove
-      the manufacturer's dealer reimbursement.
-    */
     const dealerReimbursement =
-      privatePricingDealerRebate(item);
+      rebateAllowed
+        ? privatePricingDealerRebate(item)
+        : 0;
 
     /*
       Finance fee is charged against the
@@ -1370,8 +1368,11 @@ async function privatePricingProfitProtectionDown(
       advertisingFee;
 
     dealerReimbursement +=
-      privatePricingDealerRebate(item) *
-      quantity;
+      (
+        rebateAllowed
+          ? privatePricingDealerRebate(item)
+          : 0
+      ) * quantity;
 
     requiredProfit +=
       onlineMoney(
@@ -1729,16 +1730,12 @@ async function handleCustomerPricing(
         dealerCost +
         advertisingFee;
 
-            /*
-        The customer may lose the factory rebate when
-        selecting promotional financing, while the
-        dealer reimbursement remains payable.
-      */
       const dealerReimbursement =
-        privatePricingDealerRebate(
-          item
-        ) *
-        quantity;
+        (
+          rebateAllowed
+            ? privatePricingDealerRebate(item)
+            : 0
+        ) * quantity;
 
       const taxableMultiplier =
         body?.taxExempt === true
@@ -5418,7 +5415,7 @@ const internalNotesHtml = internalNotes.map(n => `
           <h2 style="margin:0;">
             ${
               balanceDue <= 0.009
-                ? "Final Sales Receipt â€” Paid in Full"
+                ? "Final Sales Receipt — Paid in Full"
                 : totalReceived > 0
                   ? "Updated Sales Order / Payment Receipt"
                   : "Sales Order Confirmation"
