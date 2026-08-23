@@ -7007,8 +7007,20 @@ const quoteData = {
     credit:
       paymentSplit.creditAmount,
 
-    financed:
-      paymentSplit.financeAmount,
+        financed:
+      quoteFinanceAnalysis
+        ? Math.max(
+            quoteFinanceAnalysis.principalFinanced -
+            money(selectedProgram.ApplicationFee),
+            0
+          )
+        : paymentSplit.financeAmount,
+
+    requiredDown:
+      paymentSplit.minimumDown,
+
+    amountDueToday:
+      paymentSplit.amountDueToday,
 
     program:
       selectedProgram
@@ -12193,6 +12205,116 @@ function isTarterFreightGroup(group){
   return freightKey(group) === 'TARTERATTACHMENT';
 }
 
+function yanmarIncludedPackageFreightRate(line){
+  const group =
+    freightKey(
+      freightGroupOf(line)
+    );
+
+  const rule =
+    state.freightRules.find(candidate =>
+      (
+        clean(candidate.Active) === '' ||
+        isTrue(candidate.Active)
+      ) &&
+      freightKey(candidate.ApplyWhen) ===
+        'INCLUDEDWITHPACKAGE' &&
+      freightKey(
+        candidate.AppliesToValue ||
+        candidate.FreightGroup
+      ) === group &&
+      freightKey(
+        candidate.ChargeType ||
+        candidate.RuleType
+      ) === 'PERCENT'
+    );
+
+  const enteredPercent =
+    money(rule?.Percent);
+
+  if(enteredPercent <= 0){
+    return 0;
+  }
+
+  return enteredPercent <= 1
+    ? enteredPercent
+    : enteredPercent / 100;
+}
+
+function yanmarPackageLineFreightAmount(line){
+  if(!line || !line.item){
+    return 0;
+  }
+
+  const quantity =
+    Math.max(
+      Number(line.qty) || 1,
+      1
+    );
+
+  if(!line.included){
+    return (
+      skuFreightAmount(
+        line.item,
+        quantity
+      ) || 0
+    );
+  }
+
+  const includedRate =
+    yanmarIncludedPackageFreightRate(
+      line
+    );
+
+  if(includedRate <= 0){
+    return 0;
+  }
+
+  const dealerCost =
+    effectiveDealerCostOf(
+      line.item
+    );
+
+  if(dealerCost > 0){
+    return (
+      dealerCost *
+      quantity *
+      includedRate
+    );
+  }
+
+  /*
+    Public CSVs intentionally omit DNP. Derive the
+    included-package amount from the exported standalone
+    percentage freight without exposing dealer cost.
+  */
+  const standaloneAmount =
+    skuFreightAmount(
+      line.item,
+      quantity
+    ) || 0;
+
+  const enteredStandaloneRate =
+    Number(
+      line.item.FreightPercent
+    );
+
+  const standaloneRate =
+    Number.isFinite(enteredStandaloneRate) &&
+    enteredStandaloneRate > 0
+      ? (
+          enteredStandaloneRate <= 1
+            ? enteredStandaloneRate
+            : enteredStandaloneRate / 100
+        )
+      : 0;
+
+  return standaloneRate > 0
+    ? standaloneAmount *
+      (includedRate / standaloneRate)
+    : 0;
+}
+
 function automaticYanmarPackageFreight(parentLine){
   if(
     !parentLine ||
@@ -12218,17 +12340,18 @@ function automaticYanmarPackageFreight(parentLine){
     )
   ];
 
-      const freightLines =
+  const freightLines =
     packageLines.filter(packageLine =>
-      !packageLine.included
+      isYanmarAttachmentFreightGroup(
+        freightGroupOf(packageLine)
+      )
     );
 
   const rawFreight =
     freightLines.reduce((sum, packageLine) => {
       const amount =
-        skuFreightAmount(
-          packageLine.item,
-          Number(packageLine.qty) || 1
+        yanmarPackageLineFreightAmount(
+          packageLine
         );
 
       return (
@@ -12289,7 +12412,6 @@ function freightSummary(){
             childLine &&
             childLine.item &&
             childLine.requiredItem &&
-            !childLine.included &&
             tightSku(childLine.parentSku) ===
               parentSKU
           )
@@ -12335,9 +12457,8 @@ function freightSummary(){
       freightLines.reduce(
         (sum, freightLine) => {
           const amount =
-            skuFreightAmount(
-              freightLine.item,
-              Number(freightLine.qty) || 1
+            yanmarPackageLineFreightAmount(
+              freightLine
             );
 
           return (
@@ -14871,7 +14992,7 @@ const horsepowerMatch =
     categoryAttachments
       .map(attachment => `
         <option value="${escapeHtml(
-          skuOf(attachment)
+          'variant-index|' + state.attachments.indexOf(attachment)
         )}">
           ${escapeHtml(nameOf(attachment))} —
           ${fmtMoney(priceOf(attachment))}
@@ -15956,14 +16077,41 @@ function addAccessoryCardToQuote(sku, qty){
       if(type === 'charger'){ item = findCharger($('stihl-charger-select').value); qty = Number($('stihl-charger-qty').value)||1; }
       if(type === 'tarter'){
 
-        item =
-          state.attachments.find(
-            attachment =>
-              skuOf(attachment) ===
-              clean(
-                $('stihl-tarter-select').value
-              )
+        const selectedValue =
+          clean(
+            $('stihl-tarter-select').value
           );
+
+        const variantPrefix =
+          'variant-index|';
+
+        if(
+          selectedValue.startsWith(
+            variantPrefix
+          )
+        ){
+          const variantIndex =
+            Number(
+              selectedValue.slice(
+                variantPrefix.length
+              )
+            );
+
+          item = Number.isInteger(variantIndex)
+            ? state.attachments[variantIndex]
+            : null;
+        }else{
+          /*
+            Backward-compatible fallback for links or
+            saved selections that still contain a SKU.
+          */
+          item =
+            state.attachments.find(
+              attachment =>
+                skuOf(attachment) ===
+                selectedValue
+            );
+        }
 
         qty =
           Number(

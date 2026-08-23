@@ -545,6 +545,16 @@ td{
       <td class="num" id="quote-credit">$0.00</td>
     </tr>
 
+    <tr id="quote-required-down-row">
+  <td>Required Equipment Down Payment</td>
+  <td class="num" id="quote-required-down">$0.00</td>
+</tr>
+
+<tr id="quote-amount-due-today-row">
+  <td>Total Amount Due Today</td>
+  <td class="num" id="quote-amount-due-today">$0.00</td>
+</tr>
+
      <tr id="quote-financed-row">
   <td>Amount Financed</td>
   <td class="num" id="quote-financed">$0.00</td>
@@ -1721,6 +1731,36 @@ const selectedCredit =
 
 const selectedFinanced =
   money(savedPayment.financed);
+
+const requiredDown =
+  money(savedPayment.requiredDown);
+
+const amountDueToday =
+  money(savedPayment.amountDueToday);
+
+document.getElementById(
+  'quote-required-down'
+).textContent =
+  fmtMoney(requiredDown);
+
+document.getElementById(
+  'quote-required-down-row'
+).style.display =
+  requiredDown > 0
+    ? ''
+    : 'none';
+
+document.getElementById(
+  'quote-amount-due-today'
+).textContent =
+  fmtMoney(amountDueToday);
+
+document.getElementById(
+  'quote-amount-due-today-row'
+).style.display =
+  amountDueToday > 0
+    ? ''
+    : 'none';
 
 document.getElementById(
   'quote-cash-row'
