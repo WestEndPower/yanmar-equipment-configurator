@@ -1,5 +1,5 @@
 ﻿Active,Amount,AppliesTo,AppliesToValue,ApplyWhen,ChargeType,DealerCostBasis,DeliveryGroup,DisplayLabel,FreightGroup,MaximumCharge,MinimumCharge,Percent,QtyMax,QtyMin,RuleID,RuleName,SortOrder,Notes
-T,600,FreightGroup,SA,Always,Fixed,,,Factory Freight,SA,,,,,1,YANMAR-FREIGHT-SA,Yanmar SA Tractor Freight,10,$600 per SA tractor or package; included components add no separate freight.
+T,600,FreightGroup,SA,Always,Fixed,,,Factory Freight,SA,,,,,1,YANMAR-FREIGHT-SA,Yanmar SA Tractor Freight,10,$600 per SA tractor or package. Included Yanmar attachments and accessories are charged separately at 2% of DNP.
 T,700,FreightGroup,YT,Always,Fixed,,,Factory Freight,YT,,,,,1,YANMAR-FREIGHT-YT,Yanmar YT Tractor Freight,20,$700 per YT tractor or package; included components add no separate freight.
 T,700,FreightGroup,YM,Always,Fixed,,,Factory Freight,YM,,,,,1,YANMAR-FREIGHT-YM,Yanmar YM Tractor Freight,30,$700 per YM tractor or package; included components add no separate freight.
 T,700,FreightGroup,SM,Always,Fixed,,,Factory Freight,SM,,,,,1,YANMAR-FREIGHT-SM,Yanmar SM Tractor Freight,40,$700 per SM tractor or package; included components add no separate freight.
