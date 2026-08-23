@@ -1000,7 +1000,7 @@ function privatePricingFinanceProgramApplies(
 
   /*
     Finance eligibility uses either minimum profit
-    or maximum dealer fee—not both.
+    or maximum dealer feeâ€”not both.
 
     MinimumProfitAmount greater than zero takes
     priority. When no minimum profit is set, an
@@ -2057,6 +2057,16 @@ async function handleCustomerFinancePrograms(
             Number(
               onlineClean(program.TermMonths)
             ) || 0,
+
+          CreditScoreMin:
+            onlineMoney(
+              program.CreditScoreMin
+            ),
+
+          CreditScoreMax:
+            onlineMoney(
+              program.CreditScoreMax
+            ),
 
           CustomerOriginationFee:
             onlineMoney(
@@ -5408,7 +5418,7 @@ const internalNotesHtml = internalNotes.map(n => `
           <h2 style="margin:0;">
             ${
               balanceDue <= 0.009
-                ? "Final Sales Receipt — Paid in Full"
+                ? "Final Sales Receipt â€” Paid in Full"
                 : totalReceived > 0
                   ? "Updated Sales Order / Payment Receipt"
                   : "Sales Order Confirmation"

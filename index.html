@@ -4376,6 +4376,54 @@ function requestPublicFinanceEligibility(tool){
             const eligiblePrograms =
         result.programs || [];
 
+      const protectedScoreRanges =
+        new Map(
+          eligiblePrograms
+            .map(program => [
+              clean(
+                program.ProgramID ||
+                program.PaymentOptionID
+              ),
+              {
+                CreditScoreMin:
+                  clean(program.CreditScoreMin),
+                CreditScoreMax:
+                  clean(program.CreditScoreMax)
+              }
+            ])
+            .filter(([programID]) =>
+              programID
+            )
+        );
+
+      /*
+        Score thresholds are safe customer-facing eligibility
+        data. Merge them into the public CSV rows without
+        exposing dealer fees, cost, or profitability fields.
+      */
+      state.paymentOptions.forEach(program => {
+        const programID =
+          clean(
+            program.ProgramID ||
+            program.PaymentOptionID
+          );
+
+        const protectedRange =
+          protectedScoreRanges.get(
+            programID
+          );
+
+        if(!protectedRange){
+          return;
+        }
+
+        program.CreditScoreMin =
+          protectedRange.CreditScoreMin;
+
+        program.CreditScoreMax =
+          protectedRange.CreditScoreMax;
+      });
+
       const eligibleIDs =
         new Set(
           eligiblePrograms
@@ -12718,6 +12766,67 @@ function freightSummary(){
           'Actual freight cost',
         actualFreightCost,
         customerFreightCharge
+      });
+
+      return;
+    }
+
+    /*
+      A configured Yanmar freight rule is the current policy and must
+      override any older freight amount exported on the product SKU.
+      The SKU amount remains the fallback when no active Yanmar rule
+      applies to the product's freight group.
+    */
+    const yanmarPolicyMatches =
+      state.freightRules.filter(rule =>
+        (
+          clean(rule.Active) === '' ||
+          isTrue(rule.Active)
+        ) &&
+        freightKey(rule.RuleID).startsWith('YANMAR') &&
+        freightRuleMatchesGroup(rule, group) &&
+        freightQtyMatches(rule, qty) &&
+        (
+          freightKey(rule.ApplyWhen || 'Always') === 'ALWAYS' ||
+          freightKey(rule.ApplyWhen || 'AllSales') === 'ALLSALES'
+        )
+      );
+
+    if(yanmarPolicyMatches.length > 0){
+      yanmarPolicyMatches.forEach(rule => {
+        const amount =
+          freightAmountForRule(
+            rule,
+            qty,
+            line.item
+          );
+
+        if(amount > 0){
+          rows.push({
+            group,
+            qty,
+            amount,
+            label:
+              clean(rule.DisplayLabel) ||
+              clean(rule.RuleName) ||
+              'Factory Freight',
+            applyWhen:
+              clean(rule.ApplyWhen) ||
+              'Always'
+          });
+        }
+      });
+
+      debug.push({
+        model: clean(line.item.Model),
+        sku: skuOf(line.item),
+        group,
+        qty,
+        source: 'Yanmar freight rule',
+        matchingRules:
+          yanmarPolicyMatches.map(rule =>
+            clean(rule.RuleID)
+          )
       });
 
       return;
