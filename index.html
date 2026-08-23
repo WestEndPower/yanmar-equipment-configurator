@@ -12312,6 +12312,14 @@ function yanmarPackageLineFreightAmount(line){
     return 0;
   }
 
+  /*
+    Required components are already contained in the factory package.
+    They do not receive a separate attachment/accessory freight charge.
+  */
+  if(line.requiredItem){
+    return 0;
+  }
+
   const quantity =
     Math.max(
       Number(line.qty) || 1,
@@ -12783,7 +12791,8 @@ function freightSummary(){
           clean(rule.Active) === '' ||
           isTrue(rule.Active)
         ) &&
-        findBattery(rule, group) &&
+        freightKey(rule.RuleID).startsWith('YANMAR') &&
+        freightRuleMatchesGroup(rule, group) &&
         freightQtyMatches(rule, qty) &&
         (
           freightKey(rule.ApplyWhen || 'Always') === 'ALWAYS' ||
