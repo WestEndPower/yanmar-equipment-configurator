@@ -17501,6 +17501,45 @@ const packageActualFreightCharge =
         packageActualFreightCost
       );
 
+const packageConfiguredFreightCharge = (() => {
+  if(packageActualFreightCharge !== null){
+    return packageActualFreightCharge;
+  }
+
+  const group = freightGroupOf(line);
+  const qty = Number(line.qty) || 1;
+
+  const matchingRules =
+    state.freightRules.filter(rule =>
+      (
+        clean(rule.Active) === '' ||
+        isTrue(rule.Active)
+      ) &&
+      freightRuleMatchesGroup(rule, group) &&
+      freightQtyMatches(rule, qty) &&
+      ['ALWAYS', 'ALLSALES'].includes(
+        freightKey(rule.ApplyWhen || 'Always')
+      )
+    );
+
+  if(matchingRules.length > 0){
+    return matchingRules.reduce(
+      (sum, rule) =>
+        sum + freightAmountForRule(
+          rule,
+          qty,
+          line.item
+        ),
+      0
+    );
+  }
+
+  return skuFreightAmount(
+    line.item,
+    qty
+  ) || 0;
+})();
+
 const packageFreightNeedsConfirmation =
   !line.included &&
   isTarterFreightGroup(
@@ -17521,8 +17560,12 @@ const packageFreightNotice =
       : tarterOrderDealerCost >= 6000
         ? 'No Factory Freight Charge Applies'
         : 'Factory Freight Must Be Confirmed'
-    : yanmarPackageFreight > 0
+    : (
+        packageConfiguredFreightCharge +
+        yanmarPackageFreight
+      ) > 0
       ? `A ${fmtMoney(
+          packageConfiguredFreightCharge +
           yanmarPackageFreight
         )} Factory Freight Charge Applies`
       : '';
