@@ -967,7 +967,7 @@ body.dealer-mode .dealer-only{
           max="850"
           step="1"
           inputmode="numeric"
-          placeholder="Blank = all">
+          placeholder="Blank = show all score tiers">
     </div>
 
     <div id="stihl-financing-in-lieu-wrap" style="display:none;">
@@ -14211,13 +14211,25 @@ function renderFinancingOptions(){
 
     const scoreMin = money(p.CreditScoreMin);
     const scoreMax = money(p.CreditScoreMax);
-    const scoreText = scoreMin > 0 && scoreMax > 0
-      ? ` • Score ${scoreMin}-${scoreMax}`
-      : scoreMin > 0
-        ? ` • Score ${scoreMin}+`
-        : scoreMax > 0
-          ? ` • Score up to ${scoreMax}`
-          : '';
+    const enteredScore = Number(
+      clean(
+        $('stihl-customer-credit-score')?.value
+      )
+    );
+
+    const scoreIsEntered =
+      Number.isFinite(enteredScore) &&
+      enteredScore > 0;
+
+    const scoreText = scoreIsEntered
+      ? ''
+      : scoreMin > 0 && scoreMax > 0
+        ? ` • Score ${scoreMin}-${scoreMax}`
+        : scoreMin > 0
+          ? ` • Score ${scoreMin}+`
+          : scoreMax > 0
+            ? ` • Score up to ${scoreMax}`
+            : '';
 
     return `
       <option value="${escapeHtml(id)}">
