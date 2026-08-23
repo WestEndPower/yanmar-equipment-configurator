@@ -13334,7 +13334,8 @@ box.style.display = '';
   if(allowDelivery){
     const rows = state.delivery
       .map(row => {
-        const zip = clean(row.ZipCode || row.Zip || row.ZIP || row.zip || row.Lookup);
+        const rawZip = clean(row.ZipCode || row.Zip || row.ZIP || row.zip || row.Lookup);
+        const zip = /^\d{4}$/.test(rawZip) ? rawZip.padStart(5, '0') : rawZip;
         const town = clean(row.DeliveryTown || row.Town || row.City || row.Area);
 const deliveryState = clean(row.DeliveryState || row.State);
 const fee = money(row[deliveryGroup]);
