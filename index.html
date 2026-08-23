@@ -12423,10 +12423,17 @@ function automaticYanmarPackageFreight(parentLine){
 
   const rawFreight =
     freightLines.reduce((sum, packageLine) => {
-      const amount =
-        yanmarPackageLineFreightAmount(
+      const actualFreight =
+        lineActualFreightCost(
           packageLine
         );
+
+      const amount =
+        actualFreight === null
+          ? yanmarPackageLineFreightAmount(
+              packageLine
+            )
+          : actualFreight;
 
       return (
         sum +
@@ -12521,10 +12528,17 @@ function freightSummary(){
     const rawFreight =
       freightLines.reduce(
         (sum, freightLine) => {
-          const amount =
-            yanmarPackageLineFreightAmount(
+          const actualFreight =
+            lineActualFreightCost(
               freightLine
             );
+
+          const amount =
+            actualFreight === null
+              ? yanmarPackageLineFreightAmount(
+                  freightLine
+                )
+              : actualFreight;
 
           return (
             sum +
@@ -17502,6 +17516,14 @@ const packageActualFreightCharge =
       );
 
 const packageConfiguredFreightCharge = (() => {
+  if(
+    isYanmarAttachmentFreightGroup(
+      freightGroupOf(line)
+    )
+  ){
+    return 0;
+  }
+
   if(packageActualFreightCharge !== null){
     return packageActualFreightCharge;
   }
