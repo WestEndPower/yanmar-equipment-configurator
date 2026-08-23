@@ -1321,15 +1321,13 @@ async function handleCustomerPricing(
 
     if(paymentMethod === "finance"){
 
-      financeCashAmount =
-        onlineMoney(
-          body?.cashAmount
-        );
-
-      financeCreditAmount =
-        onlineMoney(
-          body?.creditAmount
-        );
+             /*
+        Customer deposits reduce the final amount
+        financed, but must not create an additional
+        automatic merchandise discount.
+      */
+      financeCashAmount = 0;
+      financeCreditAmount = 0;
 
       financeProgramID =
         onlineClean(

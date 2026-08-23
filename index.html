@@ -3752,10 +3752,17 @@ function dealerEngine(){
     sum + lineTotal(line), 0
   );
 
-  const dealerCost = cartLineDealerCostTotal();
-  const advertisingFee = cartAdvertisingFeeTotal();
-    const internalFreightCost =
+    const dealerCost =
+    cartLineDealerCostTotal();
+
+  const advertisingFee =
+    cartAdvertisingFeeTotal();
+
+  const internalFreightCost =
     cartInternalFreightCostTotal();
+
+  const customerFreight =
+    freightFee();
 
   const trueDealerCost =
     cartTrueDealerCostTotal() +
@@ -3802,8 +3809,9 @@ function dealerEngine(){
       0
     );
 
-  const grossProfit =
+    const grossProfit =
     dealerSellingSubtotal +
+    customerFreight +
     dealerRebate +
     bidFleetDealerRebate -
     trueDealerCost;
@@ -3833,6 +3841,7 @@ function dealerEngine(){
     advertisingFee,
     trueDealerCost,
     internalFreightCost,
+    customerFreight,
     lineDiscounts,
     customerDiscount,
     customerRebate,
@@ -12003,7 +12012,7 @@ function skuFreightAmount(item, qty = 1){
     );
   }
 
-    if(rateType === 'PERCENT'){
+ if(rateType === 'PERCENT'){
     const enteredPercent =
       Number(item.FreightPercent);
 
@@ -17803,8 +17812,14 @@ const netDealerCostForProfit =
     0
   );
 
+/*
+  Customer freight offsets the corresponding
+  internal freight cost included in dealer cost.
+  Setup, delivery and warranty remain neutral.
+*/
 const grossProfit =
-  sellingSubtotalForProfit -
+  sellingSubtotalForProfit +
+  freight -
   netDealerCostForProfit;
 
 const splitForFees =
