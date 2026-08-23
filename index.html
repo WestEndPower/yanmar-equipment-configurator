@@ -12783,8 +12783,7 @@ function freightSummary(){
           clean(rule.Active) === '' ||
           isTrue(rule.Active)
         ) &&
-        freightKey(rule.RuleID).startsWith('YANMAR') &&
-        freightRuleMatchesGroup(rule, group) &&
+        findBattery(rule, group) &&
         freightQtyMatches(rule, qty) &&
         (
           freightKey(rule.ApplyWhen || 'Always') === 'ALWAYS' ||
