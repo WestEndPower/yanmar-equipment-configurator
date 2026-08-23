@@ -3539,7 +3539,7 @@ function publicPricingCartContext(){
   return {
     primarySku:
       publicFinanceSKU(
-        state.selectedTool
+        primaryFinanceItem()
       ),
 
     items:
@@ -3772,7 +3772,7 @@ function publicProfitProtectionDown(){
 
   const primarySku =
     publicFinanceSKU(
-      state.selectedTool
+      primaryFinanceItem()
     );
 
   if(!primarySku){
@@ -4315,6 +4315,44 @@ function publicFinanceSKU(tool){
   return clean(
     tool?.StihlID ||
     tool?.SKU
+  );
+}
+
+function primaryFinanceItem(){
+  const equipmentGroups =
+    new Set([
+      'SA',
+      'YT',
+      'YM',
+      'SM',
+      'BULL',
+      'LONGHORN',
+      'BRAHMA',
+      'ZTR'
+    ]);
+
+  const visibleLines =
+    state.cart.filter(line =>
+      line &&
+      line.item &&
+      !line.included &&
+      !line.requiredItem
+    );
+
+  const primaryEquipmentLine =
+    visibleLines.find(line =>
+      equipmentGroups.has(
+        freightKey(
+          freightGroupOf(line)
+        )
+      )
+    );
+
+  return (
+    primaryEquipmentLine?.item ||
+    visibleLines[0]?.item ||
+    state.selectedTool ||
+    null
   );
 }
 
@@ -13999,7 +14037,7 @@ function renderSaleRecordSummary(total){
 }
 
 function financingApplies(program){
-  const tool = state.selectedTool;
+  const tool = primaryFinanceItem();
   if(!tool) return false;
 
   if(!isDateActive(program.StartDate, program.EndDate)){
@@ -14307,18 +14345,30 @@ function renderFinancingOptions(){
       clean(p.PaymentOptionID) ||
       clean(p.Label);
 
-        const protectedPricing =
-      state.selectedTool
+    const financeItem =
+      primaryFinanceItem();
+
+    const protectedPricing =
+      financeItem
         ? publicPromoFinancePricingCache.get(
             publicPromoFinancePricingKey(
-              state.selectedTool,
+              financeItem,
               p
             )
           )
         : null;
 
+    const visibleCartLineCount =
+      state.cart.filter(line =>
+        line &&
+        line.item &&
+        !line.included &&
+        !line.requiredItem
+      ).length;
+
     const monthlyText =
-      protectedPricing
+      protectedPricing &&
+      visibleCartLineCount <= 1
         ? ` • ${fmtMoney(
             protectedPricing.monthly
           )}/mo`
