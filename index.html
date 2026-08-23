@@ -6622,6 +6622,24 @@ $('stihl-customer-email').addEventListener('blur', () => {
 
 });   // closes Payment Options forEach
 
+const customerCreditScoreInput =
+  $('stihl-customer-credit-score');
+
+if(customerCreditScoreInput){
+  customerCreditScoreInput.addEventListener(
+    'input',
+    () => {
+      /*
+        A changed score can invalidate a previously selected
+        tier. Clear that selection and rebuild both finance
+        lists immediately while the customer types.
+      */
+      clearSelectedFinancingProgram();
+      renderCart();
+    }
+  );
+}
+
 }     // closes bindEvents
 
 const viewQuote = $('stihl-view-quote');
