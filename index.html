@@ -3534,6 +3534,48 @@ function currentPublicPricingSelection(){
   return null;
 }
 
+function publicPricingCartContext(){
+
+  return {
+    primarySku:
+      publicFinanceSKU(
+        state.selectedTool
+      ),
+
+    items:
+      state.cart
+        .filter(line =>
+          line &&
+          line.item &&
+          !line.included
+        )
+        .map(line => ({
+          sku:
+            clean(
+              line.item.StihlID ||
+              line.item.SKU
+            ),
+
+          quantity:
+            Number(line.qty) || 1
+        }))
+        .filter(item =>
+          item.sku
+        ),
+
+    customerFreight:
+      freightFee(),
+
+    setupAmount:
+      setupFee(),
+
+    deliveryAmount:
+      deliveryFee(),
+
+    warrantyAmount:
+      warrantyAmount()
+  };
+}
 
 function publicPricingKey(
   line,
@@ -3552,6 +3594,9 @@ function publicPricingKey(
   const taxExempt =
     $('stihl-tax-exempt')?.checked === true;
 
+  const cartContext =
+    publicPricingCartContext();
+
   return JSON.stringify([
     sku,
     quantity,
@@ -3559,7 +3604,8 @@ function publicPricingKey(
     selection?.financeProgramId || "",
     selection?.cashAmount || 0,
     selection?.creditAmount || 0,
-    taxExempt
+    taxExempt,
+    cartContext
   ]);
 }
 
@@ -3647,8 +3693,12 @@ if(!CONFIGURATOR_API){
       sku,
       quantity:
         Number(line?.qty) || 1,
-      taxExempt:
+            taxExempt:
         $('stihl-tax-exempt')?.checked === true,
+
+      cart:
+        publicPricingCartContext(),
+
       ...selection
     };
 
@@ -3709,6 +3759,49 @@ if(!CONFIGURATOR_API){
   }
 
   return null;
+}
+
+function publicProfitProtectionDown(){
+
+  const selectedProgram =
+    selectedCustomerFinanceProgram();
+
+  if(!selectedProgram){
+    return 0;
+  }
+
+  const primarySku =
+    publicFinanceSKU(
+      state.selectedTool
+    );
+
+  if(!primarySku){
+    return 0;
+  }
+
+  const primaryLine =
+    state.cart.find(line =>
+      line &&
+      line.item &&
+      !line.included &&
+      clean(
+        line.item.StihlID ||
+        line.item.SKU
+      ) === primarySku
+    );
+
+  if(!primaryLine){
+    return 0;
+  }
+
+  const pricing =
+    publicServerPricingForLine(
+      primaryLine
+    );
+
+  return money(
+    pricing?.profitProtectionDown
+  );
 }
 
 function westEndPowerDiscountForLine(line){
@@ -13388,24 +13481,41 @@ function minimumDownForProgram(program, total){
       ? rawPercent * 100
       : rawPercent;
 
+  let lenderDown = 0;
+
   if(fixed > 0){
-    return Math.min(fixed, total);
+    lenderDown =
+      Math.min(fixed, total);
+  }else if(percent > 0){
+    lenderDown =
+      Math.min(
+        Math.ceil(
+          total * (percent / 100)
+        ),
+        total
+      );
   }
 
-  if(percent > 0){
-    return Math.min(
-      Math.ceil(
-        total * (percent / 100)
-      ),
-      total
-    );
-  }
+  const profitProtectionDown =
+    publicProfitProtectionDown();
 
-  return 0;
+  return Math.min(
+    Math.max(
+      lenderDown,
+      profitProtectionDown
+    ),
+    total
+  );
 }
 
 function minimumDownRequirementLabel(program){
-  if(!program) return 'Not Required';
+
+  if(!program){
+    return 'Not Required';
+  }
+
+  const total =
+    currentQuoteTotal();
 
   const fixed = money(
     program.MinimumDown ||
@@ -13423,6 +13533,34 @@ function minimumDownRequirementLabel(program){
     rawPercent > 0 && rawPercent < 1
       ? rawPercent * 100
       : rawPercent;
+
+  let lenderDown = 0;
+
+  if(fixed > 0){
+    lenderDown =
+      Math.min(fixed, total);
+  }else if(percent > 0){
+    lenderDown =
+      Math.min(
+        Math.ceil(
+          total * (percent / 100)
+        ),
+        total
+      );
+  }
+
+  const profitProtectionDown =
+    publicProfitProtectionDown();
+
+  if(
+    profitProtectionDown > 0 &&
+    profitProtectionDown > lenderDown
+  ){
+    return (
+      `${fmtMoney(profitProtectionDown)} ` +
+      `Required Equipment Down Payment`
+    );
+  }
 
   if(fixed > 0){
     return `${fmtMoney(fixed)} required`;
@@ -16584,10 +16722,62 @@ function paymentEngine(totalBeforeSavings){
         )
       : 0;
 
+    /*
+    A card deposit reduces the financed balance but
+    also creates a 3% card-processing cost. Credit it
+    only for the net profit protection it provides.
+  */
+  const profitProtectionDown =
+    publicProfitProtectionDown();
+
+  const financeFeeRate =
+    money(
+      selectedProgram?.DealerFeePercent
+    ) / 100;
+
+  const creditProtectionRate =
+    financeFeeRate > 0
+      ? Math.max(
+          (
+            financeFeeRate -
+            0.03
+          ) /
+          financeFeeRate,
+          0
+        )
+      : 1;
+
+  const effectiveProtectionDeposit =
+    enteredCash +
+    (
+      enteredCredit *
+      creditProtectionRate
+    );
+
+  const lenderExtraDown =
+    Math.max(
+      minimumDown -
+      enteredDeposit,
+      0
+    );
+
+  const profitProtectionExtraDown =
+    Math.max(
+      profitProtectionDown -
+      effectiveProtectionDeposit,
+      0
+    );
+
   const requiredExtraDown =
     financeSelected
       ? paymentCents(
-          Math.max(minimumDown - enteredDeposit, 0)
+          Math.ceil(
+            Math.max(
+              lenderExtraDown,
+              profitProtectionExtraDown
+            ) /
+            10
+          ) * 10
         )
       : 0;
 
@@ -16595,13 +16785,26 @@ function paymentEngine(totalBeforeSavings){
 
   const creditAmount = enteredCredit;
 
+    /*
+    Any minimum-profit shortfall becomes a required
+    equipment down payment. Existing cash or card
+    deposits satisfy this requirement first.
+  */
   const amountDueToday =
-    paymentCents(cashAmount + creditAmount);
+    paymentCents(
+      cashAmount +
+      creditAmount +
+      requiredExtraDown
+    );
 
   const financeAmount =
     financeSelected
       ? paymentCents(
-          Math.max(total - amountDueToday, 0)
+          Math.max(
+            total -
+            amountDueToday,
+            0
+          )
         )
       : 0;
 
@@ -16634,6 +16837,7 @@ function paymentSplitAmounts(totalBeforeSavings){
     creditAmount: payment.creditAmount,
     financeAmount: payment.financeAmount,
     customerDeposit: payment.enteredDeposit,
+    amountDueToday: payment.amountDueToday,
     requiredExtraDown: payment.requiredExtraDown,
     minimumDown: payment.minimumDown
   };
@@ -17597,7 +17801,7 @@ lines.querySelectorAll(
       state.cart[idx].discountType =
         clean(el.value);
 
-      /*
+/*
         Always clear the previous amount when
         changing between discount types.
       */
@@ -18275,7 +18479,7 @@ if(selectedProgram && selectedFinanceIsBelowMinimum(totalBeforeFinanceCheck)){
     paymentSplitAmounts(totalBeforeFinance);
 
   const enteredDown =
-    split.customerDeposit;
+    split.amountDueToday;
 
   const minimumDown =
     minimumDownForProgram(

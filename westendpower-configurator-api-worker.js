@@ -1193,6 +1193,267 @@ function privatePricingFinanceProgramApplies(
   );
 }
 
+function privatePricingInternalFreight(
+  item,
+  quantity
+){
+
+  const qty =
+    Math.max(Number(quantity) || 1, 1);
+
+  const rateType =
+    onlineClean(
+      item?.FreightRateType
+    ).toUpperCase();
+
+  const enteredAmount =
+    onlineMoney(
+      item?.FreightAmount
+    );
+
+  if(
+    rateType === "FIXED" ||
+    rateType === "AMOUNT"
+  ){
+    return enteredAmount * qty;
+  }
+
+  if(rateType === "PERCENT"){
+
+    if(enteredAmount > 0){
+      return enteredAmount * qty;
+    }
+
+    const enteredPercent =
+      Number(item?.FreightPercent);
+
+    if(
+      !Number.isFinite(enteredPercent) ||
+      enteredPercent <= 0
+    ){
+      return 0;
+    }
+
+    const decimalRate =
+      enteredPercent <= 1
+        ? enteredPercent
+        : enteredPercent / 100;
+
+    return (
+      privatePricingLineDealerCost(
+        item,
+        qty
+      ) *
+      decimalRate
+    );
+  }
+
+  return 0;
+}
+
+
+async function privatePricingProfitProtectionDown(
+  env,
+  brandId,
+  program,
+  cart,
+  taxExempt,
+  primarySku,
+  primaryAutomaticDiscount
+){
+
+  if(
+    !program ||
+    !cart ||
+    !Array.isArray(cart.items)
+  ){
+    return 0;
+  }
+
+  const cartItems =
+    cart.items
+      .filter(entry =>
+        entry &&
+        onlineClean(entry.sku)
+      )
+      .slice(0, 50);
+
+  if(!cartItems.length){
+    return 0;
+  }
+
+  const rebateAllowed =
+    privatePricingProgramAllowsRebate(
+      program
+    );
+
+  let merchandiseSelling = 0;
+  let trueDealerCost = 0;
+  let dealerReimbursement = 0;
+  let requiredProfit = 0;
+  let internalFreight = 0;
+
+  for(const entry of cartItems){
+
+    const sku =
+      onlineClean(entry.sku);
+
+    const quantity =
+      Math.min(
+        Math.max(
+          Math.floor(
+            Number(entry.quantity) || 1
+          ),
+          1
+        ),
+        100
+      );
+
+    const item =
+      await findPrivatePricingItem(
+        env,
+        sku,
+        brandId
+      );
+
+    if(!item){
+      continue;
+    }
+
+    const customerRebate =
+      rebateAllowed
+        ? privatePricingCustomerRebate(
+            item
+          )
+        : 0;
+
+    let sellingPrice =
+      Math.max(
+        (
+          privatePricingUnitPrice(item) -
+          customerRebate
+        ) *
+        quantity,
+        0
+      );
+
+    if(
+      sku === primarySku &&
+      primaryAutomaticDiscount > 0
+    ){
+      sellingPrice =
+        Math.max(
+          sellingPrice -
+          primaryAutomaticDiscount,
+          0
+        );
+    }
+
+    const dealerCost =
+      privatePricingLineDealerCost(
+        item,
+        quantity
+      );
+
+    const advertisingFee =
+      privatePricingAdvertisingFee(
+        item,
+        quantity,
+        dealerCost
+      );
+
+    merchandiseSelling +=
+      sellingPrice;
+
+    trueDealerCost +=
+      dealerCost +
+      advertisingFee;
+
+    dealerReimbursement +=
+      privatePricingDealerRebate(item) *
+      quantity;
+
+    requiredProfit +=
+      onlineMoney(
+        item.MinimumProfitAmount
+      ) *
+      quantity;
+
+    internalFreight +=
+      privatePricingInternalFreight(
+        item,
+        quantity
+      );
+  }
+
+  const customerFreight =
+    onlineMoney(
+      cart.customerFreight
+    );
+
+  const neutralCharges =
+    onlineMoney(cart.setupAmount) +
+    onlineMoney(cart.deliveryAmount) +
+    onlineMoney(cart.warrantyAmount);
+
+  const grossProfit =
+    merchandiseSelling +
+    customerFreight +
+    dealerReimbursement -
+    trueDealerCost -
+    internalFreight;
+
+  const taxableMultiplier =
+    taxExempt === true
+      ? 1
+      : 1.0635;
+
+  const customerTotal =
+    (
+      merchandiseSelling +
+      customerFreight +
+      neutralCharges
+    ) *
+    taxableMultiplier;
+
+  const programFeeRate =
+    privatePricingPercent(
+      program.DealerFeePercent
+    ) / 100;
+
+  if(programFeeRate <= 0){
+    return 0;
+  }
+
+  const netProfit =
+    grossProfit -
+    (
+      customerTotal *
+      programFeeRate
+    );
+
+  const shortfall =
+    Math.max(
+      requiredProfit -
+      netProfit,
+      0
+    );
+
+  if(shortfall <= 0){
+    return 0;
+  }
+
+  return Math.min(
+    Math.ceil(
+      (
+        shortfall /
+        programFeeRate
+      ) /
+      10
+    ) * 10,
+    customerTotal
+  );
+}
 
 async function handleCustomerPricing(
   request,
@@ -1272,9 +1533,10 @@ async function handleCustomerPricing(
       );
     }
 
-    let selectedFeePercent = 0;
+        let selectedFeePercent = 0;
     let rebateAllowed = true;
     let financeProgramID = "";
+    let selectedFinanceProgram = null;
     let financeCashAmount = 0;
     let financeCreditAmount = 0;
 
@@ -1369,6 +1631,9 @@ async function handleCustomerPricing(
           }
         );
       }
+
+      selectedFinanceProgram =
+        program;
 
       selectedFeePercent =
         privatePricingPercent(
@@ -1613,6 +1878,25 @@ async function handleCustomerPricing(
           100
         ) / 100;
 
+    const profitProtectionDown =
+      (
+        paymentMethod === "finance" &&
+        selectedFinanceProgram
+      )
+        ? await privatePricingProfitProtectionDown(
+            env,
+            brandId,
+            selectedFinanceProgram,
+            body?.cart,
+            body?.taxExempt === true,
+            onlineClean(
+              body?.cart?.primarySku ||
+              sku
+            ),
+            automaticDiscount
+          )
+        : 0;
+
     return Response.json(
       {
         ok:true,
@@ -1631,7 +1915,12 @@ async function handleCustomerPricing(
         automaticDiscount:
           roundMoney(automaticDiscount),
 
-        customerLinePrice:
+        profitProtectionDown:
+          roundMoney(
+            profitProtectionDown
+          ),
+
+          customerLinePrice:
           roundMoney(customerLinePrice),
 
         customerUnitPrice:
