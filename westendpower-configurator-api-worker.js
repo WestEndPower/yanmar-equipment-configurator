@@ -1000,7 +1000,7 @@ function privatePricingFinanceProgramApplies(
 
   /*
     Finance eligibility uses either minimum profit
-    or maximum dealer fee—not both.
+    or maximum dealer feeâ€”not both.
 
     MinimumProfitAmount greater than zero takes
     priority. When no minimum profit is set, an
@@ -1742,6 +1742,20 @@ async function handleCustomerPricing(
           ? 1
           : 1.0635;
 
+      /*
+        Card processing applies to the customer's complete
+        payment, not only the equipment selling price. These
+        customer charges are profit-neutral elsewhere because
+        they offset their corresponding dealer costs, but their
+        card fee must still be reserved before calculating the
+        maximum automatic discount.
+      */
+      const paymentFeeCharges =
+        onlineMoney(body?.cart?.customerFreight) +
+        onlineMoney(body?.cart?.setupAmount) +
+        onlineMoney(body?.cart?.deliveryAmount) +
+        onlineMoney(body?.cart?.warrantyAmount);
+
       function netProfit(testDiscount){
 
         const sellingPrice =
@@ -1768,7 +1782,10 @@ async function handleCustomerPricing(
             - Cash deposit carries no payment fee.
           */
           const estimatedCustomerTotal =
-            sellingPrice *
+            (
+              sellingPrice +
+              paymentFeeCharges
+            ) *
             taxableMultiplier;
 
           const boundedCashAmount =
@@ -1810,7 +1827,10 @@ async function handleCustomerPricing(
 
         }else{
           paymentFee =
-            sellingPrice *
+            (
+              sellingPrice +
+              paymentFeeCharges
+            ) *
             taxableMultiplier *
             (
               selectedFeePercent /
@@ -5415,7 +5435,7 @@ const internalNotesHtml = internalNotes.map(n => `
           <h2 style="margin:0;">
             ${
               balanceDue <= 0.009
-                ? "Final Sales Receipt — Paid in Full"
+                ? "Final Sales Receipt â€” Paid in Full"
                 : totalReceived > 0
                   ? "Updated Sales Order / Payment Receipt"
                   : "Sales Order Confirmation"
