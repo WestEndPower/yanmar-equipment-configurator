@@ -15289,6 +15289,63 @@ function removeThirdFunctionsMissingLoaders(){
   });
 }
 
+function trimThirdFunctionsToLoaderCapacity(){
+  const usedByPackage = new Map();
+
+  state.cart = state.cart.filter(line => {
+    if(!line?.item || !isThirdFunctionItem(line.item)){
+      return true;
+    }
+
+    const parentSku = clean(line.parentSku);
+    const groupKey = `${tightSku(skuOf(line.item))}|${tightSku(parentSku)}`;
+    const alreadyUsed = usedByPackage.get(groupKey) || 0;
+    const capacity = thirdFunctionCapacityForParent(line.item, parentSku);
+    const allowedQty = Math.max(capacity - alreadyUsed, 0);
+
+    if(allowedQty <= 0){
+      return false;
+    }
+
+    line.qty = Math.min(Number(line.qty) || 1, allowedQty);
+    usedByPackage.set(groupKey, alreadyUsed + line.qty);
+    return true;
+  });
+}
+
+function updateCartLineQuantity(cartIndex, nextQty){
+  const line = state.cart[cartIndex];
+  if(!line) return;
+
+  const oldQty = Math.max(1, Number(line.qty) || 1);
+  const qty = Math.max(1, Number(nextQty) || 1);
+  const parentSku = skuOf(line.item);
+
+  line.qty = qty;
+
+  /*
+    When a package parent quantity changes in Quote Summary, keep every
+    factory-included component at the same per-package quantity. Optional
+    items such as a 3rd Function Kit remain customer-selected.
+  */
+  if(!line.requiredItem && parentSku){
+    state.cart.forEach(child => {
+      if(
+        child?.requiredItem &&
+        child.included &&
+        tightSku(child.parentSku) === tightSku(parentSku)
+      ){
+        const perPackageQty = (Number(child.qty) || 1) / oldQty;
+        child.qty = Math.max(1, perPackageQty * qty);
+      }
+    });
+  }
+
+  trimThirdFunctionsToLoaderCapacity();
+  renderAttachmentOptions();
+  renderCart();
+}
+
     function renderAttachmentOptions(){
 
   const accessorySelect =
@@ -18538,12 +18595,7 @@ renderCart();
     input.addEventListener('change', () => {
       const idx = Number(input.getAttribute('data-cart-qty'));
       const qty = Math.max(1, Number(input.value) || 1);
-
-      if(state.cart[idx]){
-        state.cart[idx].qty = qty;
-      }
-
-      renderCart();
+      updateCartLineQuantity(idx, qty);
     });
   });
 
