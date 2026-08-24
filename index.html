@@ -1815,6 +1815,68 @@ function findPackageComponentRecord(componentSKU, preferredType, preferredList){
   return null;
 }
 
+function inferredPackageBackhoeRecord(packageRow){
+  if(!packageRow) return null;
+
+  const attachmentSKUs = Object.keys(packageRow)
+    .filter(key => /^AttachmentSKU\d+$/i.test(key))
+    .map(key => clean(packageRow[key]))
+    .filter(Boolean);
+
+  /*
+    Some tractor-backhoe package rows list the loader and bucket but omit
+    the backhoe itself. The bucket SKU still identifies the backhoe family:
+    BBUCKET18-B75P -> B75. Use that family to restore the missing component.
+  */
+  let backhoeFamily = '';
+
+  for(const componentSKU of attachmentSKUs){
+    const compactSKU = tightSku(componentSKU);
+    const match = compactSKU.match(/(?:BBUCKET|BUCKET).*?(B\d{2,3})P?$/i);
+
+    if(match){
+      backhoeFamily = tightSku(match[1]);
+      break;
+    }
+  }
+
+  if(!backhoeFamily) return null;
+
+  const explicitRecords = attachmentSKUs
+    .map(componentSKU =>
+      findPackageComponentRecord(
+        componentSKU,
+        'attachment',
+        state.attachments
+      )
+    )
+    .filter(Boolean);
+
+  const alreadyIncludesBackhoe = explicitRecords.some(record => {
+    const itemSKU = tightSku(skuOf(record.item));
+    const itemName = clean(nameOf(record.item)).toUpperCase();
+
+    return itemSKU.startsWith(backhoeFamily) &&
+      !itemSKU.includes('BUCKET') &&
+      itemName.includes('BACKHOE');
+  });
+
+  if(alreadyIncludesBackhoe) return null;
+
+  const item = (state.attachments || []).find(candidate => {
+    const candidateSKU = tightSku(skuOf(candidate));
+    const candidateName = clean(nameOf(candidate)).toUpperCase();
+
+    return candidateSKU.startsWith(backhoeFamily) &&
+      !candidateSKU.includes('BUCKET') &&
+      candidateName.includes('BACKHOE');
+  });
+
+  return item
+    ? { type: 'attachment', item }
+    : null;
+}
+
 function displayProductTitle(tool){
 
   return clean(tool.Description) ||
@@ -1914,6 +1976,21 @@ function displayKitIncludes(tool){
       );
     }
   });
+
+  const inferredBackhoe = inferredPackageBackhoeRecord(packageRow);
+
+  if(inferredBackhoe){
+    const backhoeLabel = nameOf(inferredBackhoe.item);
+    const bucketIndex = includedItems.findIndex(label =>
+      /BUCKET/i.test(label)
+    );
+
+    includedItems.splice(
+      bucketIndex >= 0 ? bucketIndex : includedItems.length,
+      0,
+      backhoeLabel
+    );
+  }
 
   if(!includedItems.length) return '';
 
@@ -14647,6 +14724,21 @@ function addIncludedPackageComponents(tool, parentQty){
       );
     }
   });
+
+  const inferredBackhoe = inferredPackageBackhoeRecord(packageRow);
+
+  if(inferredBackhoe){
+    addItem(
+      inferredBackhoe.type,
+      inferredBackhoe.item,
+      Number(parentQty) || 1,
+      'Included in kit',
+      true,
+      true,
+      true,
+      skuOf(tool)
+    );
+  }
 }
 
 function compatibilitySystemCodes(item){
