@@ -2321,6 +2321,16 @@ function renderDealerCosts(){
     money(savedDocument.financeDealerFeePercent) /
     100;
 
+  const manufacturerCostDiscount = Math.min(
+    Math.max(money(savedDocument.manufacturerCostDiscount), 0),
+    itemCost
+  );
+
+  const adjustedItemCost = Math.max(
+    itemCost - manufacturerCostDiscount,
+    0
+  );
+
   const sellingBeforeTax =
     Math.max(
       currentOrderTotal() -
@@ -2332,7 +2342,7 @@ function renderDealerCosts(){
     );
 
   const grossProfit =
-    sellingBeforeTax - itemCost;
+    sellingBeforeTax - adjustedItemCost;
 
   const netProfit =
     grossProfit - cardFee - financeFee;
@@ -2341,6 +2351,8 @@ function renderDealerCosts(){
     'dealer-cost-summary'
   ).innerHTML = `
     <div class="cost-summary-row"><span>Recorded Dealer Cost</span><strong>${fmtMoney(itemCost)}</strong></div>
+    ${manufacturerCostDiscount > 0 ? `<div class="cost-summary-row"><span>Manufacturer Cost Discount</span><strong>-${fmtMoney(manufacturerCostDiscount)}</strong></div>` : ''}
+    <div class="cost-summary-row"><span>Adjusted Dealer Cost</span><strong>${fmtMoney(adjustedItemCost)}</strong></div>
     <div class="cost-summary-row"><span>Credit/Debit Processing Fees</span><strong>-${fmtMoney(cardFee)}</strong></div>
     <div class="cost-summary-row"><span>Financing Program Fees</span><strong>-${fmtMoney(financeFee)}</strong></div>
     <div class="cost-summary-row"><span>Gross Profit Before Payment Fees</span><strong>${fmtMoney(grossProfit)}</strong></div>

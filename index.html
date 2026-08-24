@@ -1491,6 +1491,23 @@ body.dealer-mode .dealer-only{
 </div>
 
 <div class="stihl-line">
+  <span>Manufacturer Cost Discount</span>
+  <strong style="display:flex;align-items:center;gap:5px;">
+    <span aria-hidden="true">$</span>
+    <input
+      id="stihl-manufacturer-cost-discount"
+      type="number"
+      min="0"
+      step="0.01"
+      value="0"
+      inputmode="decimal"
+      aria-label="Manufacturer cost discount"
+      style="width:110px;text-align:right;"
+    >
+  </strong>
+</div>
+
+<div class="stihl-line">
   <span>Customer Rebate</span>
   <strong id="stihl-rebate-display">$0.00</strong>
 </div>
@@ -3987,6 +4004,14 @@ function dealerEngine(){
   const trueDealerCost =
     cartTrueDealerCostTotal() +
     internalFreightCost;
+
+  const manufacturerCostDiscount =
+    manufacturerCostDiscountAmount();
+
+  const adjustedDealerCost = Math.max(
+    trueDealerCost - manufacturerCostDiscount,
+    0
+  );
   const lineDiscounts = cartLineDiscountTotal();
 
   const bidFleet = bidFleetEngine();
@@ -4034,7 +4059,7 @@ function dealerEngine(){
     customerFreight +
     dealerRebate +
     bidFleetDealerRebate -
-    trueDealerCost;
+    adjustedDealerCost;
 
   const grossMargin =
     dealerSellingSubtotal > 0
@@ -4060,6 +4085,8 @@ function dealerEngine(){
     dealerCost,
     advertisingFee,
     trueDealerCost,
+    manufacturerCostDiscount,
+    adjustedDealerCost,
     internalFreightCost,
     customerFreight,
     lineDiscounts,
@@ -5583,6 +5610,7 @@ document
   if($('stihl-trade-enabled')) $('stihl-trade-enabled').value = '';
   if($('stihl-trade-fields')) $('stihl-trade-fields').style.display = 'none';
   if($('stihl-trade-allowance')) $('stihl-trade-allowance').value = '0';
+  if($('stihl-manufacturer-cost-discount')) $('stihl-manufacturer-cost-discount').value = '0';
 
   if($('stihl-sale-status')) $('stihl-sale-status').value = 'quote';
   if($('stihl-sale-payment-type')) $('stihl-sale-payment-type').value = '';
@@ -6379,6 +6407,11 @@ if($('stihl-dealer-print')){
   'stihl-customer-email',
   'stihl-quote-notes'
 ].forEach(id => $(id).addEventListener('input', renderCart));
+
+if($('stihl-manufacturer-cost-discount')){
+  $('stihl-manufacturer-cost-discount').addEventListener('input', renderCart);
+  $('stihl-manufacturer-cost-discount').addEventListener('change', renderCart);
+}
 
 [
   'stihl-sale-status',
@@ -7215,7 +7248,10 @@ const quoteData = {
     financeDealerFeePercent:
       selectedProgram
         ? money(selectedProgram.DealerFeePercent)
-        : 0
+        : 0,
+
+    manufacturerCostDiscount:
+      manufacturerCostDiscountAmount()
   },
 
   lines: quoteLines,
@@ -10444,6 +10480,13 @@ ${isDealer ? dealerKitBreakdownPrintHtml() : ''}
       <span>Trade-In Allowance</span>
       <strong>-${fmtMoney(tradeAllowance())}</strong>
     </div>
+
+    ${manufacturerCostDiscountAmount() > 0 ? `
+      <div style="display:flex;justify-content:space-between;">
+        <span>Manufacturer Cost Discount</span>
+        <strong>+${fmtMoney(manufacturerCostDiscountAmount())}</strong>
+      </div>
+    ` : ''}
   ` : ''}
 
   <div style="
@@ -13831,6 +13874,19 @@ function customerAdjustmentAmount(base){
   return amountFinanced *
          (money(p.CustomerAdjustmentPercent) / 100);
 
+}
+
+function manufacturerCostDiscountAmount(){
+  const entered = Math.max(
+    money($('stihl-manufacturer-cost-discount')?.value),
+    0
+  );
+
+  /* Manufacturer invoice credits reduce equipment cost only. */
+  return Math.min(
+    entered,
+    Math.max(cartTrueDealerCostTotal(), 0)
+  );
 }
 
 function paymentApplicationFee(){
@@ -17836,7 +17892,8 @@ function profitProtectedDealerDiscountAmount(
   const netDealerCost = Math.max(
     cartTrueDealerCostTotal() +
     cartInternalFreightCostTotal() -
-    dealerReimbursement,
+    dealerReimbursement -
+    manufacturerCostDiscountAmount(),
     0
   );
 
@@ -19155,7 +19212,8 @@ const netDealerCostForProfit =
   Math.max(
     cartTrueDealerCostTotal() +
     internalFreightCostForProfit -
-    totalDealerReimbursementForProfit,
+    totalDealerReimbursementForProfit -
+    manufacturerCostDiscountAmount(),
     0
   );
 
@@ -19819,7 +19877,8 @@ if($('stihl-net-dealer-cost-display')){
     Math.max(
       cartTrueDealerCostTotal() +
       cartInternalFreightCostTotal() -
-      totalDealerReimbursementForNetCost,
+      totalDealerReimbursementForNetCost -
+      manufacturerCostDiscountAmount(),
       0
     );
 
