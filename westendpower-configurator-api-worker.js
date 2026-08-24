@@ -5008,7 +5008,7 @@ async function handleQuoteManager(env, request) {
       <td>${escapeHtml(q.customer)}</td>
       <td>${escapeHtml(q.phone)}</td>
       <td>${escapeHtml(q.selected_tool)}</td>
-      <td>${escapeHtml(q.total)}</td>
+      <td>${escapeHtml(quoteCurrency(q.total))}</td>
       <td>${escapeHtml(q.status)}</td>
     </tr>
   `).join("");
@@ -5036,7 +5036,17 @@ async function handleQuoteManager(env, request) {
     <body>
       <h1>West End Power Quote Manager</h1>
 
-      placeholder="Search quote #, customer, phone, salesperson, or product"
+      <form method="get" action="/quotes">
+        ${statusFilter ? `
+          <input type="hidden" name="status" value="${escapeHtml(statusFilter)}">
+        ` : ""}
+
+        <input
+          type="search"
+          name="q"
+          value="${escapeHtml(q)}"
+          placeholder="Search quote #, customer, phone, salesperson, or product"
+          aria-label="Search quotes"
         >
 
         <button type="submit">Search</button>
@@ -5910,8 +5920,9 @@ const internalNotesHtml = internalNotes.map(n => `
           <a class="btn" href="/quotes">
             Back to Quote Manager
           </a>
-          <a class="btn orange" href="https://www.westendpower.com/payment-request-tool?quote=${encodeURIComponent(result.quote_number)}&customer=${encodeURIComponent(result.customer)}&email=${encodeURIComponent(result.email || "")}&amount=500&type=deposit&product=${encodeURIComponent(result.selected_tool)}">Request Deposit</a>
+          <a class="btn orange" target="_blank" rel="noopener noreferrer" href="https://www.westendpower.com/payment-request-tool?quote=${encodeURIComponent(result.quote_number)}&customer=${encodeURIComponent(result.customer)}&email=${encodeURIComponent(result.email || "")}&amount=500&type=deposit&product=${encodeURIComponent(result.selected_tool)}">Request Deposit</a>
           <a class="btn orange"
+target="_blank" rel="noopener noreferrer"
 href="https://www.westendpower.com/payment-request-tool?quote=${encodeURIComponent(result.quote_number)}&customer=${encodeURIComponent(result.customer)}&email=${encodeURIComponent(result.email || "")}&amount=${encodeURIComponent(balanceDue.toFixed(2))}&type=full&product=${encodeURIComponent(result.selected_tool)}">
 Request Remaining Balance
 </a>
