@@ -1000,7 +1000,7 @@ function privatePricingFinanceProgramApplies(
 
   /*
     Finance eligibility uses either minimum profit
-    or maximum dealer feeâ€”not both.
+    or maximum dealer fee—not both.
 
     MinimumProfitAmount greater than zero takes
     priority. When no minimum profit is set, an
@@ -1750,11 +1750,22 @@ async function handleCustomerPricing(
         card fee must still be reserved before calculating the
         maximum automatic discount.
       */
+      const cartPrimarySku =
+        onlineClean(body?.cart?.primarySku);
+
+      const includeSharedPaymentCharges =
+        !cartPrimarySku ||
+        cartPrimarySku === sku;
+
       const paymentFeeCharges =
-        onlineMoney(body?.cart?.customerFreight) +
-        onlineMoney(body?.cart?.setupAmount) +
-        onlineMoney(body?.cart?.deliveryAmount) +
-        onlineMoney(body?.cart?.warrantyAmount);
+        includeSharedPaymentCharges
+          ? (
+              onlineMoney(body?.cart?.customerFreight) +
+              onlineMoney(body?.cart?.setupAmount) +
+              onlineMoney(body?.cart?.deliveryAmount) +
+              onlineMoney(body?.cart?.warrantyAmount)
+            )
+          : 0;
 
       function netProfit(testDiscount){
 
@@ -5435,7 +5446,7 @@ const internalNotesHtml = internalNotes.map(n => `
           <h2 style="margin:0;">
             ${
               balanceDue <= 0.009
-                ? "Final Sales Receipt â€” Paid in Full"
+                ? "Final Sales Receipt — Paid in Full"
                 : totalReceived > 0
                   ? "Updated Sales Order / Payment Receipt"
                   : "Sales Order Confirmation"

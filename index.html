@@ -12354,7 +12354,7 @@ function yanmarPackageLineFreightAmount(line){
     Required components are already contained in the factory package.
     They do not receive a separate attachment/accessory freight charge.
   */
-  if(line.requiredItem){
+  if(line.requiredItem && line.included){
     return 0;
   }
 
@@ -14521,6 +14521,7 @@ function addToolToQuote(){
   addIncludedPackageComponents(tool, qty);
 
   renderDeliveryOptions();
+  renderAttachmentOptions();
   renderCart();
 }
 
@@ -14953,6 +14954,23 @@ function isCompatibleWithSelectedTool(item, tool){
 
   const selectedKeys = selectedCompatibilityKeys(tool);
 
+  const requiredSKUs = Object.keys(item)
+    .filter(columnName => /^RequiredSKU\d+$/i.test(columnName))
+    .map(columnName => tightSku(item[columnName]))
+    .filter(Boolean);
+
+  /*
+    A third-function kit is an option for an existing loader; it must
+    never create a loader package by itself. The package CSV identifies
+    loaders included with the selected tractor, while the cart identifies
+    a compatible loader added separately by the customer.
+  */
+  if(isThirdFunctionItem(item) && requiredSKUs.length){
+    return requiredSKUs.some(requiredSKU =>
+      packageOrCartContainsSKU(tool, requiredSKU)
+    );
+  }
+
 const horsepowerMatch =
     horsepowerCompatibilityMatches(
       item,
@@ -14968,13 +14986,8 @@ const horsepowerMatch =
     return true;
   }
 
-  const requiredSKUs = Object.keys(item)
-    .filter(columnName => /^RequiredSKU\d+$/i.test(columnName))
-    .map(columnName => tightSku(item[columnName]))
-    .filter(Boolean);
-
   if(requiredSKUs.length){
-    const includedSKUs = packageComponentSKUs(tool);
+    const includedSKUs = packageAndCartSKUs(tool);
     const requirementsSatisfied = hasNestedRequirementBranches(item)
       ? requiredSKUs.some(sku => includedSKUs.has(sku))
       : requiredSKUs.every(sku => includedSKUs.has(sku));
@@ -14988,6 +15001,65 @@ const horsepowerMatch =
     selectedKeys.includes(compatibilityKey(columnName)) &&
     isTrue(item[columnName])
   );
+}
+
+function isThirdFunctionItem(item){
+  if(!item) return false;
+
+  return /(?:\b3(?:rd)?\b|\bthird\b)\s*function/i.test(
+    [
+      nameOf(item),
+      item.Description,
+      item.ShortDescription,
+      item.Model
+    ]
+      .map(clean)
+      .filter(Boolean)
+      .join(' ')
+  );
+}
+
+function requiredSKUsOf(item){
+  return Object.keys(item || {})
+    .filter(columnName => /^RequiredSKU\d+$/i.test(columnName))
+    .map(columnName => tightSku(item[columnName]))
+    .filter(Boolean);
+}
+
+function packageAndCartSKUs(tool){
+  const skus = packageComponentSKUs(tool);
+
+  state.cart.forEach(line => {
+    if(line?.item){
+      skus.add(tightSku(skuOf(line.item)));
+    }
+  });
+
+  return skus;
+}
+
+function packageOrCartContainsSKU(tool, sku){
+  return packageAndCartSKUs(tool).has(tightSku(sku));
+}
+
+function cartContainsAnySKU(skus){
+  const wanted = new Set((skus || []).map(tightSku).filter(Boolean));
+
+  return state.cart.some(line =>
+    line?.item && wanted.has(tightSku(skuOf(line.item)))
+  );
+}
+
+function removeThirdFunctionsMissingLoaders(){
+  state.cart = state.cart.filter(line => {
+    if(!line?.item || !isThirdFunctionItem(line.item)){
+      return true;
+    }
+
+    const requiredSKUs = requiredSKUsOf(line.item);
+
+    return !requiredSKUs.length || cartContainsAnySKU(requiredSKUs);
+  });
 }
 
     function renderAttachmentOptions(){
@@ -16334,7 +16406,39 @@ function addAccessoryCardToQuote(sku, qty){
         qty = Number($('stihl-accessory-qty')?.value)||1;
       }
       if(!item) return;
-      addItem(type, item, qty, '');
+
+      if(isThirdFunctionItem(item)){
+        const requiredLoaderSKUs = requiredSKUsOf(item);
+        const loaderLine = state.cart.find(line =>
+          line?.item &&
+          requiredLoaderSKUs.includes(tightSku(skuOf(line.item)))
+        );
+
+        if(!loaderLine){
+          renderAttachmentOptions();
+          return;
+        }
+
+        const visiblePackageSKU =
+          loaderLine.requiredItem && clean(loaderLine.parentSku)
+            ? loaderLine.parentSku
+            : skuOf(loaderLine.item);
+
+        addItem(
+          type,
+          item,
+          qty,
+          `Optional with ${nameOf(loaderLine.item)}`,
+          false,
+          true,
+          true,
+          visiblePackageSKU
+        );
+      }else{
+        addItem(type, item, qty, '');
+      }
+
+      renderAttachmentOptions();
       renderCart();
     }
 
@@ -16376,6 +16480,15 @@ function findRequiredItem(code){
 function addRequiredItems(parentItem, parentQty){
 
   if(!parentItem){
+    return;
+  }
+
+  /*
+    RequiredSKU on a third-function kit is an availability prerequisite,
+    not permission to auto-add a loader. Visibility is handled by
+    isCompatibleWithSelectedTool().
+  */
+  if(isThirdFunctionItem(parentItem)){
     return;
   }
 
@@ -16655,7 +16768,10 @@ function replaceCartComponent(parentSku, currentSku, nextSku){
     x.parentSku !== parentSku
   );
 
+  removeThirdFunctionsMissingLoaders();
+
   renderDeliveryOptions();
+  renderAttachmentOptions();
   renderCart();
 }
 
