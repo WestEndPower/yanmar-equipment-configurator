@@ -1750,7 +1750,7 @@ function clearCurrentQuoteNumber(){
   );
 }
   
-    function nameOf(item){
+function nameOf(item){
   return clean(
     item.Name ||
     item.Description ||
@@ -1759,6 +1759,60 @@ function clearCurrentQuoteNumber(){
     item.Model ||
     skuOf(item)
   );
+}
+
+function packageComponentSkuKey(value){
+  return tightSku(value).replace(/KIT$/i, '');
+}
+
+function findPackageComponentRecord(componentSKU, preferredType, preferredList){
+  const wantedExact = tightSku(componentSKU);
+  const wantedBase = packageComponentSkuKey(componentSKU);
+
+  if(!wantedExact) return null;
+
+  const pools = [
+    { type: preferredType, list: preferredList || [] },
+    { type: 'attachment', list: state.attachments },
+    { type: 'accessory', list: state.accessories },
+    { type: 'part', list: state.parts },
+    { type: 'battery', list: state.batteries },
+    { type: 'charger', list: state.chargers },
+    { type: 'tool', list: state.tools }
+  ];
+
+  const seen = new Set();
+
+  for(const pool of pools){
+    for(const item of pool.list || []){
+      if(!item || seen.has(item)) continue;
+      seen.add(item);
+
+      const identifiers = [
+        item.SKU,
+        item.StihlID,
+        item.SKUSecondary,
+        item['SKU Secondary'],
+        item.Model
+      ]
+        .map(tightSku)
+        .filter(Boolean);
+
+      if(
+        identifiers.includes(wantedExact) ||
+        identifiers.some(identifier =>
+          packageComponentSkuKey(identifier) === wantedBase
+        )
+      ){
+        return {
+          type: pool.type || preferredType,
+          item
+        };
+      }
+    }
+  }
+
+  return null;
 }
 
 function displayProductTitle(tool){
@@ -1842,10 +1896,13 @@ function displayKitIncludes(tool){
       const qty =
         Number(packageRow[`${group.prefix}Qty${i}`]) || 1;
 
-      const item = group.list.find(component =>
-        clean(component.StihlID) === componentSKU ||
-        clean(component.SKU) === componentSKU
+      const componentRecord = findPackageComponentRecord(
+        componentSKU,
+        group.type.toLowerCase(),
+        group.list
       );
+
+      const item = componentRecord?.item;
 
       if(!item) continue;
 
@@ -14559,10 +14616,13 @@ function addIncludedPackageComponents(tool, parentQty){
       const componentQty =
         Number(packageRow[`${group.prefix}Qty${i}`]) || 1;
 
-      const component = group.list.find(item =>
-        clean(item.StihlID) === componentSKU ||
-        clean(item.SKU) === componentSKU
+      const componentRecord = findPackageComponentRecord(
+        componentSKU,
+        group.type,
+        group.list
       );
+
+      const component = componentRecord?.item;
 
       if(!component){
         console.warn(
@@ -14576,7 +14636,7 @@ function addIncludedPackageComponents(tool, parentQty){
       }
 
       addItem(
-        group.type,
+        componentRecord.type || group.type,
         component,
         componentQty * (Number(parentQty) || 1),
         'Included in kit',
