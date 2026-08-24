@@ -7042,8 +7042,10 @@ const quoteGrossSubtotal =
   warrantyAmount();
 
 const manualCustomerDiscount =
-  dealerDiscountAmount(
-    quoteGrossSubtotal
+  profitProtectedDealerDiscountAmount(
+    dealerDiscountAmount(quoteGrossSubtotal),
+    quoteGrossSubtotal,
+    0
   );
 
 const quoteLines =
@@ -17698,6 +17700,90 @@ function dealerDiscountAmount(baseSubtotal){
   return Math.min(subtotal * (percent / 100), subtotal);
 }
 
+function profitProtectedDealerDiscountAmount(
+  requestedDiscount,
+  grossSubtotal,
+  customerAdjustment
+){
+  const requested = Math.max(Number(requestedDiscount) || 0, 0);
+  const minimumProfit = minimumProfitAmountTotal();
+
+  if(requested <= 0 || minimumProfit <= 0){
+    return requested;
+  }
+
+  const freight = freightFee();
+  const setup = setupFee();
+  const delivery = deliveryFee();
+  const warranty = warrantyAmount();
+  const rebate = customerRebateAmount();
+  const westEndDiscount = westEndPowerDiscountAmount(grossSubtotal);
+  const bidFleetDiscount = bidFleetDiscountAmount();
+  const adjustment = Number(customerAdjustment) || 0;
+
+  const baselineSubtotal = Math.max(
+    grossSubtotal - westEndDiscount - bidFleetDiscount - rebate + adjustment,
+    0
+  );
+
+  const baselineTaxableSubtotal = Math.max(
+    baselineSubtotal - tradeAllowance(),
+    0
+  );
+
+  const baselineTax = $('stihl-tax-exempt')?.checked
+    ? 0
+    : baselineTaxableSubtotal * TAX_RATE;
+
+  const baselineSplit = paymentSplitAmounts(
+    baselineTaxableSubtotal + baselineTax
+  );
+
+  const baselineCardFee = paymentCents(
+    baselineSplit.creditAmount * 0.03
+  );
+
+  const selectedProgram = selectedCustomerFinanceProgram();
+  const baselineFinanceFee = selectedProgram
+    ? financeAnalysis(selectedProgram, baselineSplit.financeAmount).fee
+    : 0;
+
+  const sellingSubtotalForProfit = Math.max(
+    baselineSubtotal - freight - delivery - setup - warranty,
+    0
+  );
+
+  const bidFleet = bidFleetEngine();
+  const dealerReimbursement =
+    dealerRebateAmount() +
+    (bidFleet.eligible === true ? money(bidFleet.dealerRebate) : 0);
+
+  const netDealerCost = Math.max(
+    cartTrueDealerCostTotal() +
+    cartInternalFreightCostTotal() -
+    dealerReimbursement,
+    0
+  );
+
+  const baselineGrossProfit =
+    sellingSubtotalForProfit + freight - netDealerCost;
+
+  const baselineNetProfit =
+    baselineGrossProfit - baselineCardFee - baselineFinanceFee;
+
+  /*
+    One dollar of customer discount reduces gross profit by one dollar.
+    Payment fees may fall as price falls, so this profit-cushion cap is
+    conservative and guarantees the configured minimum-profit floor.
+  */
+  const availableProfit = Math.max(
+    baselineNetProfit - minimumProfit,
+    0
+  );
+
+  return Math.min(requested, availableProfit);
+}
+
 function dealerDiscountLabel(){
   const selected = clean($('stihl-dealer-discount')?.value);
 
@@ -18825,7 +18911,7 @@ const freight = freightFee();
 const warranty = warrantyAmount();
 const rebate = customerRebateAmount();
 const grossSubtotal = productSubtotal + setup + delivery + freight + warranty;
-const discount = dealerDiscountAmount(grossSubtotal);
+const requestedDiscount = dealerDiscountAmount(grossSubtotal);
 const paymentDiscount = paymentDiscountAmount(grossSubtotal);
 const westEndDiscount =
   westEndPowerDiscountAmount(grossSubtotal);
@@ -18835,6 +18921,12 @@ const bidFleetDiscount =
 
 const customerAdjustment =
   customerAdjustmentAmount(grossSubtotal);
+
+const discount = profitProtectedDealerDiscountAmount(
+  requestedDiscount,
+  grossSubtotal,
+  customerAdjustment
+);
 
 const applicationFee =
   paymentApplicationFee();
@@ -19110,6 +19202,12 @@ discountLine.style.fontWeight =
         <div class="stihl-line">
           <span>${escapeHtml(dealerDiscountLabel())}</span>
           <strong style="color:#c00000;">-${fmtMoney(discount)}</strong>
+        </div>
+      ` : ''}
+
+      ${requestedDiscount > discount + 0.009 ? `
+        <div style="font-size:11px;color:#c00000;font-weight:900;margin:2px 0 6px;">
+          Requested discount limited to maintain the minimum profit amount.
         </div>
       ` : ''}
 
