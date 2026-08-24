@@ -1648,6 +1648,7 @@ const state = {
   selectedTool: null,
   selectedSystemButton: '',
   selectedPowerButton: '',
+  activeFinancingSelector: '',
   cart: []
 };
 
@@ -6684,6 +6685,14 @@ $('stihl-customer-email').addEventListener('blur', () => {
 
   if(el.checked){
 
+    const clearCreditAmount =
+      creditFullPaymentSelected() ||
+      creditBalancePaymentSelected();
+
+    const clearCashAmount =
+      cashFullPaymentSelected() ||
+      cashBalancePaymentSelected();
+
     if($('stihl-credit-balance-payment')){
       $('stihl-credit-balance-payment').checked = false;
     }
@@ -6698,6 +6707,14 @@ $('stihl-customer-email').addEventListener('blur', () => {
 
     if($('stihl-credit-full-payment')){
       $('stihl-credit-full-payment').checked = false;
+    }
+
+    if(clearCreditAmount && $('stihl-credit-payment')){
+      $('stihl-credit-payment').value = '$0.00';
+    }
+
+    if(clearCashAmount && $('stihl-cash-payment')){
+      $('stihl-cash-payment').value = '$0.00';
     }
 
   }else{
@@ -6717,6 +6734,11 @@ $('stihl-customer-email').addEventListener('blur', () => {
 
   if(id === 'stihl-financing-select'){
     el.dataset.selectedValue = clean(el.value);
+    state.activeFinancingSelector = clean(el.value)
+      ? 'standard'
+      : state.activeFinancingSelector === 'standard'
+        ? ''
+        : state.activeFinancingSelector;
 
     if(clean(el.value)){
       const clearCreditAmount =
@@ -6764,6 +6786,11 @@ $('stihl-customer-email').addEventListener('blur', () => {
 
   if(id === 'stihl-financing-in-lieu-select'){
     el.dataset.selectedValue = clean(el.value);
+    state.activeFinancingSelector = clean(el.value)
+      ? 'in-lieu'
+      : state.activeFinancingSelector === 'in-lieu'
+        ? ''
+        : state.activeFinancingSelector;
 
     if(clean(el.value)){
       const clearCreditAmount =
@@ -13813,6 +13840,8 @@ function selectedFinanceIsBelowMinimum(totalBeforeFinance){
 
 function clearSelectedFinancingProgram(){
 
+  state.activeFinancingSelector = '';
+
   if($('stihl-financing-select')){
     $('stihl-financing-select').value = '';
     $('stihl-financing-select').dataset.selectedValue = '';
@@ -14017,7 +14046,12 @@ function selectedCustomerFinanceProgram(){
   const inLieuId =
     clean($('stihl-financing-in-lieu-select')?.value);
 
-  const id = inLieuId || standardId;
+  const id =
+    state.activeFinancingSelector === 'standard'
+      ? standardId
+      : state.activeFinancingSelector === 'in-lieu'
+        ? inLieuId
+        : inLieuId || standardId;
 
   if(!id){
     return null;
