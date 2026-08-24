@@ -15065,7 +15065,7 @@ function thirdFunctionCapacityForParent(item, parentSku){
 
   return thirdFunctionLoaderLines(item)
     .filter(loaderLine =>
-      visiblePackageSKUForLine(loaderLine) === wantedParent
+      tightSku(visiblePackageSKUForLine(loaderLine)) === wantedParent
     )
     .reduce(
       (sum, loaderLine) => sum + (Number(loaderLine.qty) || 1),
