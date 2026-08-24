@@ -1797,47 +1797,35 @@ function displayKitIncludes(tool){
       list: state.batteries,
       prefix: 'Battery',
       max: 3,
-      label: item =>
-        clean(item.BatteryID) ||
-        clean(item.Model) ||
-        nameOf(item)
+      label: item => nameOf(item)
     },
     {
       type: 'Charger',
       list: state.chargers,
       prefix: 'Charger',
       max: 3,
-      label: item =>
-        clean(item.ChargerID) ||
-        clean(item.Model) ||
-        nameOf(item)
+      label: item => nameOf(item)
     },
     {
       type: 'Attachment',
       list: state.attachments,
       prefix: 'Attachment',
       max: 3,
-      label: item =>
-        clean(item.Model) ||
-        nameOf(item)
+      label: item => nameOf(item)
     },
     {
       type: 'Accessory',
       list: state.accessories,
       prefix: 'Accessory',
       max: 1,
-      label: item =>
-        clean(item.Model) ||
-        nameOf(item)
+      label: item => nameOf(item)
     },
     {
       type: 'Part',
       list: state.parts,
       prefix: 'Part',
       max: 1,
-      label: item =>
-        clean(item.Model) ||
-        nameOf(item)
+      label: item => nameOf(item)
     }
   ];
 
@@ -1862,13 +1850,10 @@ function displayKitIncludes(tool){
       if(!item) continue;
 
       const label = group.label(item);
-      const typeLabel =
-        qty > 1 ? `${group.type}s` : group.type;
-
       includedItems.push(
         qty > 1
-          ? `(${qty}) ${label} ${typeLabel}`
-          : `${label} ${typeLabel}`
+          ? `(${qty}) ${label}`
+          : label
       );
     }
   });
@@ -7636,11 +7621,34 @@ function renderTools(){
   const powerType = clean(tool.PowerType).toUpperCase();
   const systemType = clean(tool.System).toUpperCase();
 
-  return !(
-    powerType === 'GAS' ||
-    powerType === 'ELECTRIC' ||
-    systemType === 'GAS' ||
-    systemType === 'ELECTRIC'
+  const explicitlyBatteryPowered =
+    powerType.includes('BATTERY') ||
+    powerType.includes('CORDLESS') ||
+    systemType === 'BATTERY';
+
+  const hasBatteryPackage = !!clean(tool.KitBattery);
+
+  const hasBatteryRecommendation = !!(
+    clean(tool.RecommendedBattery) ||
+    clean(tool.StandardCharger)
+  );
+
+  const hasBatteryCompatibility =
+    (Array.isArray(tool.CompatibilityRows)
+      ? tool.CompatibilityRows
+      : []
+    ).some(row =>
+      Object.keys(row || {}).some(columnName =>
+        /^(?:BatteryID|RecommendedBatteryID)\d+$/i.test(columnName) &&
+        clean(row[columnName])
+      )
+    );
+
+  return (
+    explicitlyBatteryPowered ||
+    hasBatteryPackage ||
+    hasBatteryRecommendation ||
+    hasBatteryCompatibility
   );
 }
     
