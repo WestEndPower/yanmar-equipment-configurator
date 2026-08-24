@@ -6963,7 +6963,10 @@ if(viewQuote){
       state.cart.filter(line =>
         line &&
         line.item &&
-        !line.requiredItem
+        (
+          !line.requiredItem ||
+          !line.included
+        )
       );
 
     const equipmentSubtotal =
