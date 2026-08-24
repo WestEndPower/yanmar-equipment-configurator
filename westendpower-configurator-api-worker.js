@@ -5558,6 +5558,15 @@ const internalNotesHtml = internalNotes.map(n => `
             <h2>Quote Summary</h2>
             <div class="line"><span>Selected Tool</span><strong>${escapeHtml(result.selected_tool)}</strong></div>
             <div class="line"><span>Subtotal</span><strong>${escapeHtml(result.subtotal)}</strong></div>
+            ${quoteMoney(trade?.allowance) > 0 ? `
+              <div class="line">
+                <span>Trade-In Allowance</span>
+                <strong>-${escapeHtml(
+                  quoteMoney(trade.allowance)
+                    .toLocaleString("en-US", {style:"currency", currency:"USD"})
+                )}</strong>
+              </div>
+            ` : ""}
             <div class="line"><span>Tax</span><strong>${escapeHtml(result.tax)}</strong></div>
             <div class="line"><span>Total</span><strong>${escapeHtml(result.total)}</strong></div>
             ${quoteMoney(payload.paymentMethodPriceAdjustment) !== 0 ? `
@@ -5736,15 +5745,18 @@ const internalNotesHtml = internalNotes.map(n => `
                       Amount Received
                     </label>
 
-                    <input
-                      id="payment-amount"
-                      type="number"
-                      min="0.01"
-                      max="${balanceDue.toFixed(2)}"
-                      step="0.01"
-                      placeholder="Enter payment amount"
-                      style="width:100%;padding:9px;margin-top:4px;"
-                    >
+                    <div style="display:flex;align-items:center;border:1px solid #777;border-radius:6px;background:#fff;margin-top:4px;overflow:hidden;">
+                      <span aria-hidden="true" style="padding-left:10px;font-weight:900;">$</span>
+                      <input
+                        id="payment-amount"
+                        type="number"
+                        min="0.01"
+                        max="${balanceDue.toFixed(2)}"
+                        step="0.01"
+                        placeholder="Enter payment amount"
+                        style="width:100%;padding:9px;border:0;box-shadow:none;"
+                      >
+                    </div>
                   </div>
 
                   <div>
@@ -6463,47 +6475,71 @@ async function saveDealerQuoteState(
         : []
   };
 
+  const salePaymentMethod = String(
+    payload?.sale?.paymentType ||
+    payload?.sale?.paymentMethod ||
+    payload?.sale?.method ||
+    ""
+  ).trim();
+
+  if(salePaymentMethod && payload.payments.length){
+    const initialPayment = payload.payments[0];
+    const currentMethod = String(initialPayment?.method || "").trim();
+
+    if(
+      initialPayment &&
+      (!currentMethod || currentMethod.toLowerCase() === "other")
+    ){
+      initialPayment.method = salePaymentMethod;
+      initialPayment.methodKey = salePaymentMethod
+        .toLowerCase()
+        .replaceAll(" / ", "-")
+        .replaceAll(" ", "-");
+    }
+  }
+
   let savedTax = String(data.tax || "");
   let savedTotal = String(data.total || "");
   let savedStatus = status;
+  const calculatedSubtotal =
+    calculatedQuoteSubtotal(payload, data.subtotal);
+  const savedSubtotal = calculatedSubtotal > 0
+    ? `$${calculatedSubtotal.toFixed(2)}`
+    : String(data.subtotal || "");
 
   if(existing && payload.payments.length){
-    const repricing = await repriceQuoteForPayments(
+    const locked = lockedQuoteAmounts(
       {
         ...existing,
-        configurator:brandId,
-        payment:String(data.payment || existing.payment || ""),
         tax:String(data.tax || existing.tax || ""),
         total:String(data.total || existing.total || "")
       },
-      payload,
-      payload.payments,
-      env
+      payload
     );
 
-    if(repricing){
-      const received = payload.payments
-        .filter(payment =>
-          String(payment?.status || "received").toLowerCase() !== "voided"
-        )
-        .reduce(
-          (sum, payment) => sum + (Number(payment?.amount) || 0),
-          0
-        );
+    const received = payload.payments
+      .filter(payment =>
+        String(payment?.status || "received").toLowerCase() !== "voided"
+      )
+      .reduce(
+        (sum, payment) => sum + (Number(payment?.amount) || 0),
+        0
+      );
 
-      const balance = Math.max(repricing.total - received, 0);
+    const balance = Math.max(locked.total - received, 0);
 
-      payload.amountReceived = received;
-      payload.balanceDue = balance;
-      savedTax = `$${repricing.tax.toFixed(2)}`;
-      savedTotal = `$${repricing.total.toFixed(2)}`;
-      savedStatus =
-        repricing.total > 0 && balance <= 0.009
-          ? "Sold"
-          : payload.orderNumber
-            ? "Ordered"
-            : status;
-    }
+    payload.amountReceived = received;
+    payload.balanceDue = balance;
+    savedTax = `$${locked.tax.toFixed(2)}`;
+    savedTotal = `$${locked.total.toFixed(2)}`;
+    savedStatus =
+      locked.total > 0 && balance <= 0.009
+        ? "Sold"
+        : payload.orderNumber
+          ? "Ordered"
+          : status;
+
+    clearLegacyPaymentRepricing(payload);
   }
 
   if(existing){
@@ -6528,7 +6564,7 @@ async function saveDealerQuoteState(
       String(data.phone || ""),
       String(data.email || ""),
       String(data.selectedTool || ""),
-      String(data.subtotal || ""),
+      savedSubtotal,
       savedTax,
       savedTotal,
       savedStatus,
@@ -6584,7 +6620,7 @@ async function saveDealerQuoteState(
       String(data.delivery || ""),
       String(data.payment || ""),
       String(data.selectedTool || ""),
-      String(data.subtotal || ""),
+      savedSubtotal,
       String(data.tax || ""),
       String(data.total || ""),
       status,
@@ -6611,6 +6647,67 @@ function quoteMoney(value){
   return Number(
     String(value || "").replace(/[$,]/g, "")
   ) || 0;
+}
+
+function lockedQuoteAmounts(quote, payload){
+  const legacyBase =
+    payload && typeof payload.paymentPricingBase === "object"
+      ? payload.paymentPricingBase
+      : null;
+
+  const total =
+    quoteMoney(legacyBase?.originalTotal) ||
+    quoteMoney(quote?.total);
+
+  const tax =
+    legacyBase && Number.isFinite(Number(legacyBase.originalTax))
+      ? Number(legacyBase.originalTax)
+      : quoteMoney(quote?.tax);
+
+  return {total, tax};
+}
+
+function clearLegacyPaymentRepricing(payload){
+  if(!payload || typeof payload !== "object") return;
+  delete payload.paymentMethodPriceAdjustment;
+  delete payload.repricedEquipmentTotal;
+  delete payload.repricedTax;
+  delete payload.repricedTotal;
+  delete payload.actualPaymentMix;
+  delete payload.paymentPricingBase;
+
+  if(Array.isArray(payload.items)){
+    payload.items.forEach(item => {
+      if(item && typeof item === "object"){
+        delete item.repricedLineTotal;
+      }
+    });
+  }
+}
+
+function calculatedQuoteSubtotal(payload, fallback){
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+
+  const equipment = items.reduce(
+    (sum, item) => sum + quoteMoney(item?.lineTotal),
+    0
+  );
+
+  if(equipment <= 0){
+    return quoteMoney(fallback);
+  }
+
+  const totals = payload?.totals || {};
+  const freight =
+    totals.freight && typeof totals.freight === "object"
+      ? quoteMoney(totals.freight.total)
+      : quoteMoney(totals.freight);
+
+  return equipment +
+    freight +
+    quoteMoney(totals.delivery) +
+    quoteMoney(totals.setupInstallation) +
+    quoteMoney(totals.extendedWarranty);
 }
 
 function quotePaymentClass(payment){
@@ -6929,16 +7026,8 @@ async function recordQuotePayment(
 
   payments.push(payment);
 
-  const repricing = await repriceQuoteForPayments(
-    quote,
-    payload,
-    payments,
-    env
-  );
-
-  const orderTotal = repricing
-    ? repricing.total
-    : quoteMoney(quote.total);
+  const locked = lockedQuoteAmounts(quote, payload);
+  const orderTotal = locked.total;
 
   if(
     orderTotal > 0 &&
@@ -6947,7 +7036,7 @@ async function recordQuotePayment(
     payments.pop();
 
     return Response.json(
-      {error:"Payment exceeds the repriced remaining balance."},
+      {error:"Payment exceeds the remaining balance."},
       {status:400, headers:corsHeaders}
     );
   }
@@ -6974,6 +7063,8 @@ async function recordQuotePayment(
   payload.balanceDue =
     balanceDue;
 
+  clearLegacyPaymentRepricing(payload);
+
   await env.QUOTES_DB.prepare(`
     UPDATE quotes
     SET
@@ -6984,8 +7075,8 @@ async function recordQuotePayment(
     WHERE id = ?
   `).bind(
     newStatus,
-    repricing ? `$${repricing.tax.toFixed(2)}` : quote.tax,
-    repricing ? `$${repricing.total.toFixed(2)}` : quote.total,
+    `$${locked.tax.toFixed(2)}`,
+    `$${locked.total.toFixed(2)}`,
     JSON.stringify(payload),
     quoteId
   ).run();
@@ -6997,8 +7088,7 @@ async function recordQuotePayment(
       payment,
       totalReceived:newTotalReceived,
       balanceDue,
-      paymentMethodPriceAdjustment:
-        repricing ? repricing.adjustment : 0
+      paymentMethodPriceAdjustment:0
     },
     {
       headers:{
@@ -7087,16 +7177,8 @@ async function voidQuotePayment(
       0
     );
 
-  const repricing = await repriceQuoteForPayments(
-    quote,
-    payload,
-    payments,
-    env
-  );
-
-  const orderTotal = repricing
-    ? repricing.total
-    : quoteMoney(quote.total);
+  const locked = lockedQuoteAmounts(quote, payload);
+  const orderTotal = locked.total;
 
   const balanceDue = Math.max(orderTotal - totalReceived, 0);
   const newStatus =
@@ -7107,6 +7189,7 @@ async function voidQuotePayment(
   payload.payments = payments;
   payload.amountReceived = totalReceived;
   payload.balanceDue = balanceDue;
+  clearLegacyPaymentRepricing(payload);
 
   await env.QUOTES_DB.prepare(`
     UPDATE quotes
@@ -7114,8 +7197,8 @@ async function voidQuotePayment(
     WHERE id = ?
   `).bind(
     newStatus,
-    repricing ? `$${repricing.tax.toFixed(2)}` : quote.tax,
-    repricing ? `$${repricing.total.toFixed(2)}` : quote.total,
+    `$${locked.tax.toFixed(2)}`,
+    `$${locked.total.toFixed(2)}`,
     JSON.stringify(payload),
     quoteId
   ).run();
@@ -7127,8 +7210,7 @@ async function voidQuotePayment(
       payment,
       totalReceived,
       balanceDue,
-      paymentMethodPriceAdjustment:
-        repricing ? repricing.adjustment : 0
+      paymentMethodPriceAdjustment:0
     },
     {
       headers:{

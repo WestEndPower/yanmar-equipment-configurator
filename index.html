@@ -1140,7 +1140,10 @@ body.dealer-mode .dealer-only{
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">
     <div>
       <label for="stihl-sale-amount-received">Amount Received</label>
-      <input id="stihl-sale-amount-received" type="number" min="0" step="0.01" placeholder="0.00">
+      <div style="display:flex;align-items:center;border:1px solid #777;border-radius:6px;background:#fff;overflow:hidden;">
+        <span aria-hidden="true" style="padding:0 0 0 12px;font-weight:900;">$</span>
+        <input id="stihl-sale-amount-received" type="number" min="0" step="0.01" placeholder="0.00" style="border:0;box-shadow:none;">
+      </div>
     </div>
 
     <div>
@@ -1244,13 +1247,17 @@ body.dealer-mode .dealer-only{
          style="display:grid;grid-template-columns:repeat(auto-fit,minmax(80px,1fr));gap:8px;margin-top:10px;">
     </div>
 
-    <div style="margin-top:10px;">
+<div style="margin-top:10px;">
   <label for="stihl-trade-allowance">Trade Allowance</label>
-  <input id="stihl-trade-allowance"
-         type="number"
-         min="0"
-         step="0.01"
-         value="0">
+  <div style="display:flex;align-items:center;border:1px solid #777;border-radius:6px;background:#fff;overflow:hidden;">
+    <span aria-hidden="true" style="padding:0 0 0 12px;font-weight:900;">$</span>
+    <input id="stihl-trade-allowance"
+           type="number"
+           min="0"
+           step="0.01"
+           value="0"
+           style="border:0;box-shadow:none;">
+  </div>
 </div>
 
 </div>   <!-- closes #stihl-trade-fields -->
@@ -7252,6 +7259,20 @@ const quoteData = {
     money($('stihl-total')?.textContent)
   ),
 
+  trade: clean($('stihl-trade-enabled')?.value) === 'yes'
+    ? {
+        year: clean($('stihl-trade-year')?.value),
+        make: clean($('stihl-trade-make')?.value),
+        model: clean($('stihl-trade-model')?.value),
+        hours: clean($('stihl-trade-hours')?.value),
+        condition: clean($('stihl-trade-condition')?.value),
+        serial: clean($('stihl-trade-serial')?.value),
+        notes: clean($('stihl-trade-notes')?.value),
+        allowance: tradeAllowance(),
+        photoCount: Array.from($('stihl-trade-photos')?.files || []).length
+      }
+    : null,
+
   payment: {
     cash:
       paymentSplit.cashAmount,
@@ -7478,6 +7499,12 @@ salesTax:
           )
       }
     };
+
+    /* Keep compatibility with both receipt and dashboard payment schemas. */
+    if(quoteData.sale){
+      quoteData.sale.paymentMethod = quoteData.sale.paymentType;
+      quoteData.sale.method = quoteData.sale.paymentType;
+    }
 
     quoteData.dealerSessionToken =
       document.body.classList.contains(
@@ -10404,6 +10431,18 @@ ${isDealer ? dealerKitBreakdownPrintHtml() : ''}
     ">
       <span>${escapeHtml(warrantyLabel())}</span>
       <strong>${fmtMoney(warrantyAmount())}</strong>
+    </div>
+  ` : ''}
+
+  ${tradeAllowance() > 0 ? `
+    <div style="
+      display:flex;
+      justify-content:space-between;
+      gap:15px;
+      padding:2px 4px;
+    ">
+      <span>Trade-In Allowance</span>
+      <strong>-${fmtMoney(tradeAllowance())}</strong>
     </div>
   ` : ''}
 
@@ -13784,7 +13823,9 @@ function customerAdjustmentAmount(base){
   if(!p) return 0;
 
   const total = currentQuoteTotal();
-  const downPayment = selectedDepositAmount(total);
+  const downPayment =
+    selectedDepositAmount(total) +
+    recordedSalePaymentAmount(total);
   const amountFinanced = Math.max(total - downPayment, 0);
 
   return amountFinanced *
@@ -13900,7 +13941,11 @@ function financeAnalysis(program, amountFinanced){
 
 function renderDepositSummary(total){
   const deposit = selectedDepositAmount(total);
-  const balance = Math.max((Number(total) || 0) - deposit, 0);
+  const recordedPayment = recordedSalePaymentAmount(total);
+  const balance = Math.max(
+    (Number(total) || 0) - deposit - recordedPayment,
+    0
+  );
 
   if($('stihl-deposit-display')){
     $('stihl-deposit-display').textContent = fmtMoney(deposit);
@@ -17477,6 +17522,30 @@ function paymentCents(value){
   ) / 100;
 }
 
+function recordedSalePaymentAmount(totalBeforeSavings){
+
+  const total = paymentCents(
+    Math.max(Number(totalBeforeSavings) || 0, 0)
+  );
+
+  const status = clean($('stihl-sale-status')?.value);
+
+  if(status === 'paid'){
+    return total;
+  }
+
+  if(status !== 'deposit'){
+    return 0;
+  }
+
+  return paymentCents(
+    Math.min(
+      Math.max(money($('stihl-sale-amount-received')?.value), 0),
+      total
+    )
+  );
+}
+
 function paymentEngine(totalBeforeSavings){
 
   const total =
@@ -17632,12 +17701,17 @@ function paymentEngine(totalBeforeSavings){
       requiredExtraDown
     );
 
+  /* A recorded payment reduces the balance, but never reprices it. */
+  const recordedPayment =
+    recordedSalePaymentAmount(total);
+
   const financeAmount =
     financeSelected
       ? paymentCents(
           Math.max(
             total -
-            amountDueToday,
+            amountDueToday -
+            recordedPayment,
             0
           )
         )
@@ -17659,6 +17733,7 @@ function paymentEngine(totalBeforeSavings){
     cashAmount,
     creditAmount,
     amountDueToday,
+    recordedPayment,
     financeAmount
   };
 }
@@ -17784,6 +17859,62 @@ function profitProtectedDealerDiscountAmount(
   return Math.min(requested, availableProfit);
 }
 
+function enforceLineDiscountProfitProtection(){
+  const discountedLines = state.cart.filter(line =>
+    line &&
+    !line.included &&
+    ['dollar', 'percent', 'override'].includes(clean(line.discountType))
+  );
+
+  if(!discountedLines.length) return;
+
+  /* Start from the salesperson's requested values, not an earlier cap. */
+  discountedLines.forEach(line => {
+    if(line.discountRequestedValue === undefined){
+      line.discountRequestedValue = line.discountValue;
+    }
+    line.discountValue = 0;
+    line.discountLimited = false;
+  });
+
+  discountedLines.forEach(line => {
+    const linePrice = priceOf(line.item) * (Number(line.qty) || 1);
+    const requestedValue = money(line.discountRequestedValue);
+    const type = clean(line.discountType);
+
+    const requestedDollar = type === 'percent'
+      ? Math.min(linePrice * (requestedValue / 100), linePrice)
+      : type === 'override'
+        ? Math.max(linePrice - requestedValue, 0)
+        : Math.min(requestedValue, linePrice);
+
+    const grossSubtotal =
+      state.cart.reduce((sum, cartLine) => sum + lineTotal(cartLine), 0) +
+      setupFee() +
+      deliveryFee() +
+      freightFee() +
+      warrantyAmount();
+
+    const allowedDollar = profitProtectedDealerDiscountAmount(
+      requestedDollar,
+      grossSubtotal,
+      0
+    );
+
+    line.discountLimited = allowedDollar + 0.009 < requestedDollar;
+
+    if(type === 'percent'){
+      line.discountValue = linePrice > 0
+        ? (allowedDollar / linePrice) * 100
+        : 0;
+    }else if(type === 'override'){
+      line.discountValue = Math.max(linePrice - allowedDollar, 0);
+    }else{
+      line.discountValue = allowedDollar;
+    }
+  });
+}
+
 function dealerDiscountLabel(){
   const selected = clean($('stihl-dealer-discount')?.value);
 
@@ -17834,6 +17965,7 @@ function paymentDiscountAmount(baseAmount){
 }
 
     function renderCart(){
+      enforceLineDiscountProfitProtection();
       populateBidFleetPrograms();
        
       const specialOrderFreightBox = $('stihl-special-order-freight');
@@ -18619,7 +18751,11 @@ ${packageFreightNotice ? `
             min="0"
             ${line.discountType === 'percent' ? 'max="100"' : ''}
             step="0.01"
-            value="${escapeHtml(clean(line.discountValue || ''))}"
+            value="${escapeHtml(clean(
+              line.discountRequestedValue !== undefined
+                ? line.discountRequestedValue
+                : line.discountValue || ''
+            ))}"
             placeholder="${
               line.discountType === 'percent'
                 ? 'Enter Percentage'
@@ -18648,6 +18784,11 @@ ${packageFreightNotice ? `
           ` : ''}
         </div>
       </div>
+      ${line.discountLimited ? `
+        <div style="font-size:11px;color:#c00000;font-weight:900;margin-top:5px;">
+          Line discount limited to maintain the minimum profit amount.
+        </div>
+      ` : ''}
     </div>
 
     <div>
@@ -18800,6 +18941,8 @@ lines.querySelectorAll(
       */
       state.cart[idx].discountValue =
         '';
+      state.cart[idx].discountRequestedValue = '';
+      state.cart[idx].discountLimited = false;
     }
 
     renderCart();
@@ -18832,8 +18975,8 @@ lines.querySelectorAll(
           );
       }
 
-      state.cart[idx].discountValue =
-        enteredValue;
+      state.cart[idx].discountRequestedValue = enteredValue;
+      state.cart[idx].discountValue = enteredValue;
     }
 
     renderCart();
@@ -18963,7 +19106,8 @@ const amountFinanced =
   selectedProgram
     ? taxableSubtotal +
       tax -
-      selectedDepositAmount(taxableSubtotal + tax)
+      selectedDepositAmount(taxableSubtotal + tax) -
+      recordedSalePaymentAmount(taxableSubtotal + tax)
     : 0;
 
 const principalFinanced =
@@ -19069,7 +19213,8 @@ if($('stihl-payment-remaining-balance')){
     Math.max(
       currentTotal -
       enteredCash -
-      enteredCredit,
+      enteredCredit -
+      recordedSalePaymentAmount(currentTotal),
       0
     );
 
