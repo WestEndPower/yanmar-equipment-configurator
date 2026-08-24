@@ -15042,6 +15042,72 @@ function packageOrCartContainsSKU(tool, sku){
   return packageAndCartSKUs(tool).has(tightSku(sku));
 }
 
+function visiblePackageSKUForLine(line){
+  if(!line?.item) return '';
+
+  return clean(
+    line.requiredItem && clean(line.parentSku)
+      ? line.parentSku
+      : skuOf(line.item)
+  );
+}
+
+function thirdFunctionLoaderLines(item){
+  const requiredSKUs = new Set(requiredSKUsOf(item));
+
+  return state.cart.filter(line =>
+    line?.item && requiredSKUs.has(tightSku(skuOf(line.item)))
+  );
+}
+
+function thirdFunctionCapacityForParent(item, parentSku){
+  const wantedParent = tightSku(parentSku);
+
+  return thirdFunctionLoaderLines(item)
+    .filter(loaderLine =>
+      visiblePackageSKUForLine(loaderLine) === wantedParent
+    )
+    .reduce(
+      (sum, loaderLine) => sum + (Number(loaderLine.qty) || 1),
+      0
+    );
+}
+
+function thirdFunctionSelectedQtyForParent(item, parentSku){
+  const wantedSKU = tightSku(skuOf(item));
+  const wantedParent = tightSku(parentSku);
+
+  return state.cart
+    .filter(line =>
+      line?.item &&
+      isThirdFunctionItem(line.item) &&
+      tightSku(skuOf(line.item)) === wantedSKU &&
+      tightSku(line.parentSku) === wantedParent
+    )
+    .reduce(
+      (sum, line) => sum + (Number(line.qty) || 1),
+      0
+    );
+}
+
+function thirdFunctionRemainingCapacity(item, tool){
+  const loaderLines = thirdFunctionLoaderLines(item);
+
+  if(loaderLines.length){
+    return loaderLines.reduce((remaining, loaderLine) => {
+      const parentSku = visiblePackageSKUForLine(loaderLine);
+      const capacity = Number(loaderLine.qty) || 1;
+      const selected = thirdFunctionSelectedQtyForParent(item, parentSku);
+
+      return remaining + Math.max(capacity - selected, 0);
+    }, 0);
+  }
+
+  return requiredSKUsOf(item).some(requiredSKU =>
+    packageComponentSKUs(tool).has(requiredSKU)
+  ) ? 1 : 0;
+}
+
 function cartContainsAnySKU(skus){
   const wanted = new Set((skus || []).map(tightSku).filter(Boolean));
 
@@ -15186,9 +15252,10 @@ function removeThirdFunctionsMissingLoaders(){
           clean(accessory.Active) === '' ||
           isTrue(accessory.Active)
         ) &&
-        isCompatibleWithSelectedTool(
-          accessory,
-          tool
+        isCompatibleWithSelectedTool(accessory, tool) &&
+        (
+          !isThirdFunctionItem(accessory) ||
+          thirdFunctionRemainingCapacity(accessory, tool) > 0
         )
       )
       .sort(sortByOrder);
@@ -15435,7 +15502,13 @@ const rows = state.kmaRuntimes.filter(row =>
     if(!skuOf(a)) return false;
     if(!(clean(a.Active)==='' || isTrue(a.Active))) return false;
 
-    return isCompatibleWithSelectedTool(a, tool);
+    return (
+      isCompatibleWithSelectedTool(a, tool) &&
+      (
+        !isThirdFunctionItem(a) ||
+        thirdFunctionRemainingCapacity(a, tool) > 0
+      )
+    );
 
   }).sort(sortByOrder);
 
@@ -16409,25 +16482,42 @@ function addAccessoryCardToQuote(sku, qty){
 
       if(isThirdFunctionItem(item)){
         const requiredLoaderSKUs = requiredSKUsOf(item);
-        const loaderLine = state.cart.find(line =>
-          line?.item &&
-          requiredLoaderSKUs.includes(tightSku(skuOf(line.item)))
-        );
+        const loaderLine = state.cart.find(line => {
+          if(
+            !line?.item ||
+            !requiredLoaderSKUs.includes(tightSku(skuOf(line.item)))
+          ){
+            return false;
+          }
+
+          const parentSku = visiblePackageSKUForLine(line);
+          const capacity = Number(line.qty) || 1;
+          const selected = thirdFunctionSelectedQtyForParent(item, parentSku);
+
+          return selected < capacity;
+        });
 
         if(!loaderLine){
           renderAttachmentOptions();
           return;
         }
 
-        const visiblePackageSKU =
-          loaderLine.requiredItem && clean(loaderLine.parentSku)
-            ? loaderLine.parentSku
-            : skuOf(loaderLine.item);
+        const visiblePackageSKU = visiblePackageSKUForLine(loaderLine);
+        const remainingCapacity = Math.max(
+          (Number(loaderLine.qty) || 1) -
+          thirdFunctionSelectedQtyForParent(item, visiblePackageSKU),
+          0
+        );
+
+        if(remainingCapacity <= 0){
+          renderAttachmentOptions();
+          return;
+        }
 
         addItem(
           type,
           item,
-          qty,
+          Math.min(qty, remainingCapacity),
           `Optional with ${nameOf(loaderLine.item)}`,
           false,
           true,
@@ -16658,6 +16748,18 @@ function addRequiredItems(parentItem, parentQty){
     function addItem(type,item,qty,note,included,skipRequired,requiredItem,parentSku){
   qty = Number(qty) || 1;
 
+  if(isThirdFunctionItem(item)){
+    const capacity = thirdFunctionCapacityForParent(item, parentSku);
+    const selected = thirdFunctionSelectedQtyForParent(item, parentSku);
+    const remaining = Math.max(capacity - selected, 0);
+
+    if(remaining <= 0){
+      return;
+    }
+
+    qty = Math.min(qty, remaining);
+  }
+
   const key =
   type +
   '|' +
@@ -16769,6 +16871,21 @@ function replaceCartComponent(parentSku, currentSku, nextSku){
   );
 
   removeThirdFunctionsMissingLoaders();
+
+  renderDeliveryOptions();
+  renderAttachmentOptions();
+  renderCart();
+}
+
+function removeOptionalPackageChild(key){
+  const child = state.cart.find(line => line.key === key);
+  if(!child?.item || !isThirdFunctionItem(child.item)) return;
+
+  const childSku = skuOf(child.item);
+
+  state.cart = state.cart.filter(line =>
+    line.key !== key && tightSku(line.parentSku) !== tightSku(childSku)
+  );
 
   renderDeliveryOptions();
   renderAttachmentOptions();
@@ -17834,6 +17951,25 @@ const packageFreightNotice =
                     <div>
                       <strong>${escapeHtml(skuOf(c.item))}</strong>
                       ${escapeHtml(nameOf(c.item))}
+                      ${isThirdFunctionItem(c.item) && !c.included ? `
+                        <button
+                          type="button"
+                          data-remove-optional-child="${escapeHtml(c.key)}"
+                          style="
+                            margin-left:6px;
+                            padding:1px 6px;
+                            border:1px solid rgba(255,255,255,.65);
+                            border-radius:5px;
+                            background:transparent;
+                            color:#fff;
+                            font-size:10px;
+                            font-weight:900;
+                            cursor:pointer;
+                          "
+                        >
+                          Remove
+                        </button>
+                      ` : ''}
                     </div>
                     <strong style="text-align:right;white-space:nowrap;">
                       ${c.included
@@ -18227,6 +18363,15 @@ renderDeliveryOptions();
 renderCart();
   });
 });
+
+  lines.querySelectorAll('[data-remove-optional-child]').forEach(btn => {
+    btn.addEventListener('click', event => {
+      event.stopPropagation();
+      removeOptionalPackageChild(
+        btn.getAttribute('data-remove-optional-child')
+      );
+    });
+  });
 
   lines.querySelectorAll('[data-cart-qty]').forEach(input => {
     input.addEventListener('change', () => {
