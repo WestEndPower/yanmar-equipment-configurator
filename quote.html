@@ -895,6 +895,11 @@ const paymentDiscount =
     line.paymentDiscount
   );
 
+const directLineDiscount =
+  money(
+    line.lineDiscount
+  );
+
 const factoryRebate =
   money(
     line.factoryRebate
@@ -913,6 +918,7 @@ const bidFleetDiscount =
 const totalDiscount =
   money(line.totalDiscount) ||
   (
+    directLineDiscount +
     paymentDiscount +
     factoryRebate +
     manualCustomerDiscount +
@@ -971,6 +977,10 @@ ${money(line.totalDiscount) > 0 ? `
 
       money(line.paymentDiscount) > 0
         ? `Payment savings ${fmtMoney(line.paymentDiscount)}`
+        : '',
+
+      money(line.lineDiscount) > 0
+        ? `Line discount ${fmtMoney(line.lineDiscount)}`
         : '',
 
       money(line.manualCustomerDiscount) > 0
@@ -2095,6 +2105,11 @@ function renderAdjustedLines(){
       revisedPaymentDiscount > 0
         ? 'Payment savings ' +
           fmtMoney(revisedPaymentDiscount)
+        : '',
+
+      money(line.lineDiscount) > 0
+        ? 'Line discount ' +
+          fmtMoney(line.lineDiscount)
         : '',
 
       money(line.manualCustomerDiscount) > 0

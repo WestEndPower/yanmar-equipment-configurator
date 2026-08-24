@@ -7117,7 +7117,18 @@ const lineBidFleetDiscount =
 const originalLineTotal =
   line.included
     ? 0
-    : lineTotal(line);
+    : priceOf(line.item) * qty;
+
+const directLineDiscount =
+  line.included
+    ? 0
+    : lineDiscountAmount(line);
+
+const discountedLineTotal =
+  Math.max(
+    originalLineTotal - directLineDiscount,
+    0
+  );
 
 /*
   Calculate payment savings independently for
@@ -7142,15 +7153,16 @@ const lineFactoryRebate =
 
 const lineManualCustomerDiscount =
   quoteProductSubtotal > 0 &&
-  originalLineTotal > 0
+  discountedLineTotal > 0
     ? manualCustomerDiscount *
       (
-        originalLineTotal /
+        discountedLineTotal /
         quoteProductSubtotal
       )
     : 0;
 
 const lineTotalDiscount =
+  directLineDiscount +
   linePaymentDiscount +
   lineFactoryRebate +
   lineManualCustomerDiscount +
@@ -7167,6 +7179,8 @@ return {
             automaticYanmarPackageFreight(line),
           item: line.item,
           originalLineTotal,
+          lineDiscount:
+            directLineDiscount,
           paymentDiscount:
   linePaymentDiscount,
 
