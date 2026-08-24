@@ -631,7 +631,10 @@ td{
 
     <div class="dealer-field">
       <label for="payment-amount">Amount Received</label>
-      <input id="payment-amount" type="number" min="0" step="0.01" placeholder="0.00">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span aria-hidden="true" style="font-weight:700;">$</span>
+        <input id="payment-amount" type="number" min="0" step="0.01" placeholder="0.00" style="flex:1;min-width:0;">
+      </div>
     </div>
 
     <div class="dealer-field">
@@ -1463,6 +1466,47 @@ const documentState = {
       : []
 };
 
+function savedPaymentMethodKey(method){
+  const normalized = clean(method).toLowerCase();
+  const keys = {
+    cash: 'cash',
+    check: 'check',
+    'bank check': 'bank-check',
+    'cash / bank check': 'bank-check',
+    'personal / business check': 'check',
+    'credit / debit card': 'credit-card',
+    'credit card': 'credit-card',
+    'debit card': 'debit-card',
+    financing: 'finance',
+    'payment link': 'payment-link',
+    other: 'other'
+  };
+
+  return keys[normalized] || 'other';
+}
+
+const savedSaleMethod = clean(
+  savedSale.paymentType ||
+  savedSale.paymentMethod ||
+  savedSale.method
+);
+
+if(savedSaleMethod && documentState.payments.length){
+  const savedAmount = money(savedSale.amountReceived);
+  const savedReference = clean(savedSale.reference);
+  const legacyPayment = documentState.payments.find(payment =>
+    String(payment?.id || '').startsWith('legacy-') &&
+    money(payment?.amount) === savedAmount &&
+    clean(payment?.reference) === savedReference &&
+    (!clean(payment?.method) || clean(payment?.method).toLowerCase() === 'other')
+  );
+
+  if(legacyPayment){
+    legacyPayment.method = savedSaleMethod;
+    legacyPayment.methodKey = savedPaymentMethodKey(savedSaleMethod);
+  }
+}
+
 if(
   !documentState.payments.length &&
   money(savedSale.amountReceived) > 0
@@ -1473,8 +1517,8 @@ if(
       clean(savedSale.paymentDate) ||
       new Date().toISOString().slice(0,10),
     amount: money(savedSale.amountReceived),
-    method: clean(savedSale.paymentType) || 'Other',
-    methodKey: 'other',
+    method: savedSaleMethod || 'Other',
+    methodKey: savedPaymentMethodKey(savedSaleMethod),
     cardType: '',
     reference: clean(savedSale.reference),
     receivedBy: clean(savedCustomer.salesperson),

@@ -5485,7 +5485,7 @@ const internalNotesHtml = internalNotes.map(n => `
           </div>
           <div class="line">
             <span>Total</span>
-            <strong>${escapeHtml(result.total)}</strong>
+            <strong>${escapeHtml(quoteCurrency(result.total))}</strong>
           </div>
         </div>
 
@@ -5557,7 +5557,7 @@ const internalNotesHtml = internalNotes.map(n => `
           <div class="card">
             <h2>Quote Summary</h2>
             <div class="line"><span>Selected Tool</span><strong>${escapeHtml(result.selected_tool)}</strong></div>
-            <div class="line"><span>Subtotal</span><strong>${escapeHtml(result.subtotal)}</strong></div>
+            <div class="line"><span>Subtotal</span><strong>${escapeHtml(quoteCurrency(result.subtotal))}</strong></div>
             ${quoteMoney(trade?.allowance) > 0 ? `
               <div class="line">
                 <span>Trade-In Allowance</span>
@@ -5567,8 +5567,8 @@ const internalNotesHtml = internalNotes.map(n => `
                 )}</strong>
               </div>
             ` : ""}
-            <div class="line"><span>Tax</span><strong>${escapeHtml(result.tax)}</strong></div>
-            <div class="line"><span>Total</span><strong>${escapeHtml(result.total)}</strong></div>
+            <div class="line"><span>Tax</span><strong>${escapeHtml(quoteCurrency(result.tax))}</strong></div>
+            <div class="line"><span>Total</span><strong>${escapeHtml(quoteCurrency(result.total))}</strong></div>
             ${quoteMoney(payload.paymentMethodPriceAdjustment) !== 0 ? `
               <div class="line" style="color:#b00020;">
                 <span>Payment Method Price Adjustment</span>
@@ -6647,6 +6647,13 @@ function quoteMoney(value){
   return Number(
     String(value || "").replace(/[$,]/g, "")
   ) || 0;
+}
+
+function quoteCurrency(value){
+  return quoteMoney(value).toLocaleString("en-US", {
+    style:"currency",
+    currency:"USD"
+  });
 }
 
 function lockedQuoteAmounts(quote, payload){
