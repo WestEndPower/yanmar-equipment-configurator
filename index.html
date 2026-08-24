@@ -7689,6 +7689,7 @@ if(clean(t.PromoTitle)){
 }
 
 const rec = clean(t.RecommendedBattery);
+const kitIncludesText = displayKitIncludes(t);
 box.innerHTML = `
   
   <div class="stihl-tool-info">
@@ -7704,7 +7705,7 @@ box.innerHTML = `
   ${escapeHtml(displayProductTitle(t))}
 </div>
 
-${shouldShowBatteryInfo(t) ? `
+${kitIncludesText || shouldShowBatteryInfo(t) ? `
 <div class="stihl-kit-includes"
      style="
        text-align:center;
@@ -7714,8 +7715,8 @@ ${shouldShowBatteryInfo(t) ? `
        margin-bottom:12px;
      ">
   ${
-    displayKitIncludes(t)
-      ? escapeHtml(displayKitIncludes(t))
+    kitIncludesText
+      ? escapeHtml(kitIncludesText)
       : 'Battery &amp; Charger Sold Separately'
   }
 </div>
