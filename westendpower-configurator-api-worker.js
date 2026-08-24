@@ -5920,12 +5920,14 @@ const internalNotesHtml = internalNotes.map(n => `
           <a class="btn" href="/quotes">
             Back to Quote Manager
           </a>
-          <a class="btn orange" target="_blank" rel="noopener noreferrer" href="https://www.westendpower.com/payment-request-tool?quote=${encodeURIComponent(result.quote_number)}&customer=${encodeURIComponent(result.customer)}&email=${encodeURIComponent(result.email || "")}&amount=500&type=deposit&product=${encodeURIComponent(result.selected_tool)}">Request Deposit</a>
-          <a class="btn orange"
-target="_blank" rel="noopener noreferrer"
-href="https://www.westendpower.com/payment-request-tool?quote=${encodeURIComponent(result.quote_number)}&customer=${encodeURIComponent(result.customer)}&email=${encodeURIComponent(result.email || "")}&amount=${encodeURIComponent(balanceDue.toFixed(2))}&type=full&product=${encodeURIComponent(result.selected_tool)}">
-Request Remaining Balance
-</a>
+          ${balanceDue > 0.009 ? `
+            <a class="btn orange" target="_blank" rel="noopener noreferrer" href="https://www.westendpower.com/payment-request-tool?quote=${encodeURIComponent(result.quote_number)}&customer=${encodeURIComponent(result.customer)}&email=${encodeURIComponent(result.email || "")}&amount=500&type=deposit&product=${encodeURIComponent(result.selected_tool)}">Request Deposit</a>
+            <a class="btn orange"
+              target="_blank" rel="noopener noreferrer"
+              href="https://www.westendpower.com/payment-request-tool?quote=${encodeURIComponent(result.quote_number)}&customer=${encodeURIComponent(result.customer)}&email=${encodeURIComponent(result.email || "")}&amount=${encodeURIComponent(balanceDue.toFixed(2))}&type=full&product=${encodeURIComponent(result.selected_tool)}">
+              Request Remaining Balance
+            </a>
+          ` : ""}
         </div>
       </div>
 
@@ -7265,6 +7267,7 @@ function formatDate(value){
   if(isNaN(d.getTime())) return String(value);
 
   return d.toLocaleString("en-US", {
+    timeZone: "America/New_York",
     month: "2-digit",
     day: "2-digit",
     year: "numeric",
