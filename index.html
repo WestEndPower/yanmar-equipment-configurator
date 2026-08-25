@@ -7268,7 +7268,25 @@ const quoteData = {
         : 0,
 
     manufacturerCostDiscount:
-      manufacturerCostDiscountAmount()
+      manufacturerCostDiscountAmount(),
+
+    dealerFinancials: {
+      dealerCost: money($('stihl-dealer-cost-display')?.textContent),
+      advertisingFee: money($('stihl-advertising-fee-display')?.textContent),
+      internalFreightCost: money($('stihl-internal-freight-cost-display')?.textContent),
+      trueDealerCost: money($('stihl-true-dealer-cost-display')?.textContent),
+      manufacturerCostDiscount: manufacturerCostDiscountAmount(),
+      customerRebate: money($('stihl-rebate-display')?.textContent),
+      dealerReimbursement: money($('stihl-dealer-rebate-display')?.textContent),
+      netDealerCost: money($('stihl-net-dealer-cost-display')?.textContent),
+      grossProfit: money($('stihl-gross-profit-display')?.textContent),
+      grossMargin: clean($('stihl-gross-margin-display')?.textContent),
+      creditCardFee: money($('stihl-credit-card-fee-display')?.textContent),
+      financingFee: money($('stihl-financing-fee-display')?.textContent),
+      netProfit: money($('stihl-net-profit-display')?.textContent),
+      netMargin: clean($('stihl-net-margin-display')?.textContent),
+      minimumProfit: clean($('stihl-target-margin-display')?.textContent)
+    }
   },
 
   lines: quoteLines,

@@ -2432,6 +2432,35 @@ function renderPaymentHistory(){
 }
 
 function renderDealerCosts(){
+  const savedDealerFinancials =
+    savedDocument.dealerFinancials &&
+    typeof savedDocument.dealerFinancials === 'object'
+      ? savedDocument.dealerFinancials
+      : null;
+
+  if(savedDealerFinancials){
+    const d = savedDealerFinancials;
+
+    document.getElementById('dealer-cost-summary').innerHTML = `
+      <div class="cost-summary-row"><span>Dealer Cost</span><strong>${fmtMoney(d.dealerCost)}</strong></div>
+      <div class="cost-summary-row"><span>Advertising Fee</span><strong>${fmtMoney(d.advertisingFee)}</strong></div>
+      <div class="cost-summary-row"><span>Internal Freight Cost</span><strong>${fmtMoney(d.internalFreightCost)}</strong></div>
+      <div class="cost-summary-row"><span>True Dealer Cost</span><strong>${fmtMoney(d.trueDealerCost)}</strong></div>
+      ${money(d.manufacturerCostDiscount) > 0 ? `<div class="cost-summary-row"><span>Manufacturer Cost Discount</span><strong>-${fmtMoney(d.manufacturerCostDiscount)}</strong></div>` : ''}
+      ${money(d.customerRebate) > 0 ? `<div class="cost-summary-row"><span>Customer Rebate</span><strong>${fmtMoney(d.customerRebate)}</strong></div>` : ''}
+      ${money(d.dealerReimbursement) > 0 ? `<div class="cost-summary-row"><span>Less: Dealer Reimbursement</span><strong>-${fmtMoney(d.dealerReimbursement)}</strong></div>` : ''}
+      <div class="cost-summary-row"><span>Net Dealer Cost</span><strong>${fmtMoney(d.netDealerCost)}</strong></div>
+      <div class="cost-summary-row"><span>Gross Profit</span><strong>${fmtMoney(d.grossProfit)}</strong></div>
+      <div class="cost-summary-row"><span>Gross Margin</span><strong>${escapeHtml(d.grossMargin || '0.0%')}</strong></div>
+      <div class="cost-summary-row"><span>Credit/Debit Processing Fees</span><strong>-${fmtMoney(d.creditCardFee)}</strong></div>
+      <div class="cost-summary-row"><span>Financing Program Fees</span><strong>-${fmtMoney(d.financingFee)}</strong></div>
+      <div class="cost-summary-row total"><span>Estimated Net Profit</span><strong>${fmtMoney(d.netProfit)}</strong></div>
+      <div class="cost-summary-row"><span>Net Margin</span><strong>${escapeHtml(d.netMargin || '0.0%')}</strong></div>
+      <div class="cost-summary-row"><span>Minimum Profit Amount</span><strong>${escapeHtml(d.minimumProfit || 'Not Set')}</strong></div>
+    `;
+    return;
+  }
+
   const itemCost = visibleLines.reduce((total,line) => {
     const qty = Number(line.qty) || 1;
     const item = line.item || {};

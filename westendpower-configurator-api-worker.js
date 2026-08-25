@@ -5523,7 +5523,18 @@ const internalNotesHtml = internalNotes.map(n => `
 <div id="status-message" style="margin:8px 0;color:#1f7a3a;font-weight:bold;"></div>
           <div class="line">
             <span>Salesperson</span>
-            <strong>${escapeHtml(result.salesperson)}</strong>
+            <strong>
+              <select id="quote-salesperson" style="padding:7px;border-radius:6px;">
+                <option value="">Select Salesperson</option>
+                ${["John","Chris","New Milford Sales","Danbury Sales"].map(name => `
+                  <option value="${escapeHtml(name)}" ${result.salesperson === name ? "selected" : ""}>${escapeHtml(name)}</option>
+                `).join("")}
+              </select>
+
+              <button onclick="saveStatus()" style="padding:7px 10px;margin-left:6px;">
+                Save
+              </button>
+            </strong>
           </div>
           <div class="line">
             <span>Total</span>
@@ -6373,13 +6384,15 @@ async function recordPayment(){
 
 async function saveStatus(){
   const status = document.getElementById('quote-status').value;
+  const salesperson = document.getElementById('quote-salesperson').value;
 
   const res = await fetch('/quote-status', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify({
       id: ${Number(result.id)},
-      status
+      status,
+      salesperson
     })
   });
 
@@ -7328,10 +7341,11 @@ async function updateQuoteStatus(request, env, corsHeaders) {
 
   await env.QUOTES_DB.prepare(`
     UPDATE quotes
-    SET status = ?
+    SET status = ?, salesperson = ?
     WHERE id = ?
   `).bind(
     data.status || "Open",
+    data.salesperson || "",
     data.id
   ).run();
 
