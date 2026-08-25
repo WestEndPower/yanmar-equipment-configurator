@@ -17802,7 +17802,8 @@ function paymentEngine(totalBeforeSavings){
       requiredExtraDown
     );
 
-  /* A recorded payment reduces the balance, but never reprices it. */
+  /* A recorded payment reduces the balance, but never changes the
+     customer's agreed cash/credit/finance allocation. */
   const recordedPayment =
     recordedSalePaymentAmount(total);
 
@@ -17811,8 +17812,7 @@ function paymentEngine(totalBeforeSavings){
       ? paymentCents(
           Math.max(
             total -
-            amountDueToday -
-            recordedPayment,
+            amountDueToday,
             0
           )
         )

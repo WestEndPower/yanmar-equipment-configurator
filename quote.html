@@ -2415,6 +2415,22 @@ function renderDocumentState(){
       finance: 0
     };
 
+  const remainingAmountDueToday =
+    money(remainingPlan.cash) +
+    money(remainingPlan.credit);
+
+  document.getElementById(
+    'quote-amount-due-today'
+  ).textContent =
+    fmtMoney(remainingAmountDueToday);
+
+  document.getElementById(
+    'quote-amount-due-today-row'
+  ).style.display =
+    remainingAmountDueToday > 0
+      ? ''
+      : 'none';
+
   const displayedPlan = {
     cash:
       money(remainingPlan.cash) +
