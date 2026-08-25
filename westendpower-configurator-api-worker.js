@@ -5130,6 +5130,18 @@ async function handleQuoteDetail(env, id) {
 
   const items = Array.isArray(payload.items) ? payload.items : [];
   const trade = payload.trade || null;
+  const savedTotals =
+    payload.totals && typeof payload.totals === "object"
+      ? payload.totals
+      : {};
+  const savedPaymentPlan =
+    payload.payment && typeof payload.payment === "object"
+      ? payload.payment
+      : {};
+  const savedFreight =
+    savedTotals.freight && typeof savedTotals.freight === "object"
+      ? savedTotals.freight
+      : {};
   const notesResult = await env.QUOTES_DB.prepare(`
   SELECT
     id,
@@ -5568,6 +5580,24 @@ const internalNotesHtml = internalNotes.map(n => `
             <h2>Quote Summary</h2>
             <div class="line"><span>Selected Tool</span><strong>${escapeHtml(result.selected_tool)}</strong></div>
             <div class="line"><span>Subtotal</span><strong>${escapeHtml(quoteCurrency(result.subtotal))}</strong></div>
+            ${quoteMoney(savedFreight.total) > 0 ? `
+              <div class="line">
+                <span>${escapeHtml(savedFreight.label || "Factory Freight")}</span>
+                <strong>${escapeHtml(quoteCurrency(savedFreight.total))}</strong>
+              </div>
+            ` : ""}
+            ${quoteMoney(savedTotals.setupInstallation) > 0 ? `
+              <div class="line">
+                <span>Setup / Installation</span>
+                <strong>${escapeHtml(quoteCurrency(savedTotals.setupInstallation))}</strong>
+              </div>
+            ` : ""}
+            ${quoteMoney(savedTotals.delivery) > 0 || savedTotals.deliveryIncluded ? `
+              <div class="line">
+                <span>Delivery</span>
+                <strong>${savedTotals.deliveryIncluded ? "Included" : escapeHtml(quoteCurrency(savedTotals.delivery))}</strong>
+              </div>
+            ` : ""}
             ${quoteMoney(trade?.allowance) > 0 ? `
               <div class="line">
                 <span>Trade-In Allowance</span>
@@ -5597,6 +5627,38 @@ const internalNotesHtml = internalNotes.map(n => `
             ` : ""}
                     </div>
         </div>
+
+        ${
+          quoteMoney(savedPaymentPlan.cash) > 0 ||
+          quoteMoney(savedPaymentPlan.credit) > 0 ||
+          quoteMoney(savedPaymentPlan.financed) > 0
+            ? `
+        <div class="card">
+          <h2>Customer Payment Plan</h2>
+          ${quoteMoney(savedPaymentPlan.cash) > 0 ? `
+            <div class="line"><span>Cash / Bank Check Selected</span><strong>${escapeHtml(quoteCurrency(savedPaymentPlan.cash))}</strong></div>
+          ` : ""}
+          ${quoteMoney(savedPaymentPlan.credit) > 0 ? `
+            <div class="line"><span>Credit Card Selected</span><strong>${escapeHtml(quoteCurrency(savedPaymentPlan.credit))}</strong></div>
+          ` : ""}
+          ${quoteMoney(savedPaymentPlan.amountDueToday) > 0 ? `
+            <div class="line"><span>Amount Still Due Today</span><strong>${escapeHtml(quoteCurrency(savedPaymentPlan.amountDueToday))}</strong></div>
+          ` : ""}
+          ${quoteMoney(savedPaymentPlan.requiredDown) > 0 ? `
+            <div class="line"><span>Required Equipment Down Payment</span><strong>${escapeHtml(quoteCurrency(savedPaymentPlan.requiredDown))}</strong></div>
+          ` : ""}
+          ${quoteMoney(savedPaymentPlan.financed) > 0 ? `
+            <div class="line"><span>Amount Financed</span><strong>${escapeHtml(quoteCurrency(savedPaymentPlan.financed))}</strong></div>
+            <div class="line"><span>Bank Application Fee</span><strong>${escapeHtml(quoteCurrency(savedPaymentPlan.applicationFee))}</strong></div>
+            <div class="line"><span>Amount Financed + Fees</span><strong>${escapeHtml(quoteCurrency(savedPaymentPlan.principalWithFees))}</strong></div>
+            <div class="line"><span>Financing Program</span><strong>${escapeHtml(savedPaymentPlan.program || result.payment || "")}</strong></div>
+            <div class="line"><span>Estimated Monthly Payment</span><strong>${escapeHtml(quoteCurrency(savedPaymentPlan.monthlyPayment))}${quoteMoney(savedPaymentPlan.termMonths) > 0 ? ` &times; ${escapeHtml(savedPaymentPlan.termMonths)} months` : ""}</strong></div>
+            <div class="line"><span>Total Payback</span><strong>${escapeHtml(quoteCurrency(savedPaymentPlan.totalPayback))}</strong></div>
+          ` : ""}
+        </div>
+            `
+            : ""
+        }
 
         <div class="card">
           <h2>Customer Note</h2>

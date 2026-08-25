@@ -1564,6 +1564,61 @@ async function syncDealerQuoteState(){
       0
     );
 
+  const remainingPlanForSave =
+    documentState.remainingPaymentPlan || {
+      cash: money(savedPayment.cash),
+      credit: money(savedPayment.credit),
+      finance: money(savedPayment.financed)
+    };
+
+  const actualByClassForSave =
+    documentState.actualPaymentsByClass || {
+      cash: 0,
+      credit: 0,
+      finance: 0
+    };
+
+  const paymentPlanForSave = {
+    cash:
+      money(remainingPlanForSave.cash) +
+      money(actualByClassForSave.cash),
+    credit:
+      money(remainingPlanForSave.credit) +
+      money(actualByClassForSave.credit),
+    finance:
+      money(remainingPlanForSave.finance) +
+      money(actualByClassForSave.finance)
+  };
+
+  const paymentAllocationGap =
+    Math.max(
+      currentOrderTotal() -
+      (
+        money(paymentPlanForSave.cash) +
+        money(paymentPlanForSave.credit) +
+        money(paymentPlanForSave.finance)
+      ),
+      0
+    );
+
+  if(
+    money(savedPayment.financed) > 0 ||
+    clean(savedPayment.program)
+  ){
+    paymentPlanForSave.finance +=
+      paymentAllocationGap;
+  }else if(money(paymentPlanForSave.cash) > 0){
+    paymentPlanForSave.cash +=
+      paymentAllocationGap;
+  }else{
+    paymentPlanForSave.credit +=
+      paymentAllocationGap;
+  }
+
+  const remainingAmountDueTodayForSave =
+    money(remainingPlanForSave.cash) +
+    money(remainingPlanForSave.credit);
+
   const status =
     !documentState.orderNumber
       ? "Open"
@@ -1708,7 +1763,22 @@ async function syncDealerQuoteState(){
                 })),
 
               notes:
-                clean(savedCustomer.notes)
+                clean(savedCustomer.notes),
+
+              payment:{
+                ...savedPayment,
+                cash:
+                  paymentPlanForSave.cash,
+                credit:
+                  paymentPlanForSave.credit,
+                financed:
+                  paymentPlanForSave.finance,
+                amountDueToday:
+                  remainingAmountDueTodayForSave
+              },
+
+              totals:
+                savedTotals
             }
           }),
 
