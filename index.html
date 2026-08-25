@@ -12707,6 +12707,15 @@ function automaticYanmarPackageFreight(parentLine){
     return 0;
   }
 
+  /*
+    A manual actual-freight entry on the visible parent is an override
+    for the complete package. Do not stack attachment/accessory freight
+    on top of that manually entered amount.
+  */
+  if(lineActualFreightCost(parentLine) !== null){
+    return 0;
+  }
+
   const parentSKU =
     tightSku(
       skuOf(parentLine.item)
@@ -12811,7 +12820,10 @@ function freightSummary(){
         };
       })
       .filter(packageInfo =>
-        packageInfo.freightLines.length > 0
+        packageInfo.freightLines.length > 0 &&
+        lineActualFreightCost(
+          packageInfo.parentLine
+        ) === null
       );
 
   yanmarPackages.forEach(packageInfo => {
