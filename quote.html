@@ -324,6 +324,17 @@ td{
           id="quote-toggle-costs">
           View Costs &amp; Profit
         </button>
+
+        <button
+          type="button"
+          class="quote-btn secondary"
+          id="quote-sync-dashboard">
+          Update Dashboard
+        </button>
+      </div>
+      <div
+        id="quote-sync-dashboard-message"
+        style="margin-top:8px;font-size:12px;font-weight:800;">
       </div>
       <div style="margin-top:8px;font-size:11px;color:#666;">
         Dealer controls and financial information never print on customer documents.
@@ -1816,6 +1827,35 @@ async function syncDealerQuoteState(){
   }
 }
 
+async function manuallySyncDashboard(){
+  if(!dealerQuoteMode) return;
+
+  const button =
+    document.getElementById(
+      'quote-sync-dashboard'
+    );
+  const message =
+    document.getElementById(
+      'quote-sync-dashboard-message'
+    );
+
+  button.disabled = true;
+  button.textContent = 'Updating Dashboard...';
+  message.textContent = '';
+
+  const updated =
+    await syncDealerQuoteState();
+
+  button.disabled = false;
+  button.textContent = 'Update Dashboard';
+  message.textContent = updated
+    ? 'Dashboard updated successfully.'
+    : 'Dashboard update failed. See the error message above.';
+  message.style.color = updated
+    ? '#17652d'
+    : '#b00020';
+}
+
 const quoteDate =
   new Date(documentState.quoteDate);
 
@@ -2878,6 +2918,13 @@ if(dealerQuoteMode){
   document.getElementById(
     'quote-toggle-costs'
   ).addEventListener('click', toggleDealerCosts);
+
+  document.getElementById(
+    'quote-sync-dashboard'
+  ).addEventListener(
+    'click',
+    manuallySyncDashboard
+  );
 
   document.getElementById(
     'payment-record-button'
