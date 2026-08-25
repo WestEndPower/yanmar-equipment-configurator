@@ -5461,10 +5461,15 @@ const internalNotesHtml = internalNotes.map(n => `
           .top,.wrap{display:none !important;}
 
           .sales-print{
-            display:block !important;
+            display:flex !important;
+            flex-direction:column;
+            width:100%;
+            min-height:10.1in;
+            height:10.1in;
+            box-sizing:border-box;
             font-family:"Arial Narrow",Arial,sans-serif;
             color:#111;
-            font-size:10px;
+            font-size:16px;
             line-height:1.18;
           }
 
@@ -5473,33 +5478,41 @@ const internalNotesHtml = internalNotes.map(n => `
           .sp-logo-main{font-size:34px;line-height:.95;font-weight:900;letter-spacing:1px;color:#d71920;text-shadow:1px 1px 0 #111,-1px -1px 0 #111;white-space:nowrap;}
           .sp-logo-sub{font-family:Georgia,serif;font-size:16px;line-height:1;font-weight:700;font-style:italic;text-align:center;margin-top:5px;}
           .sp-title{font-size:21px;font-weight:900;margin:8px 0 0;}
-          .sp-meta{display:grid;grid-template-columns:115px 1fr;gap:4px 8px;font-size:11px;}
+          .sp-meta{display:grid;grid-template-columns:135px 1fr;gap:4px 8px;font-size:16px;}
           .sp-meta strong{font-weight:800;}
           .sp-two{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:7px;}
           .sp-box{border:1px solid #777;padding:6px 8px;break-inside:avoid;}
-          .sp-box-title{font-size:12px;font-weight:900;border-bottom:1px solid #888;padding-bottom:2px;margin-bottom:4px;}
-          .sp-address{min-height:48px;font-size:10.5px;line-height:1.28;}
-          .sp-address strong{font-size:11px;}
+          .sp-box-title{font-size:18px;font-weight:900;border-bottom:1px solid #888;padding-bottom:2px;margin-bottom:4px;}
+          .sp-address{min-height:48px;font-size:16px;line-height:1.28;}
+          .sp-address strong{font-size:16px;}
           .sp-note{border:1px solid #999;padding:4px 7px;margin:0 0 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
           .sp-note strong{font-weight:900;}
           .sp-table{width:100%;border-collapse:collapse;margin:0 0 7px;break-inside:auto;}
-          .sp-table th,.sp-table td{border:1px solid #999;padding:4px 5px;font-size:9.5px;line-height:1.15;}
-          .sp-table th{background:#d71920 !important;color:#fff !important;text-align:center;font-size:10px;font-weight:900;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+          .sp-table th,.sp-table td{border:1px solid #999;padding:5px 6px;font-size:16px;line-height:1.15;}
+          .sp-table th{background:#d71920 !important;color:#fff !important;text-align:center;font-size:16px;font-weight:900;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
           .sp-table .center{text-align:center;}
           .sp-table .money{text-align:right;white-space:nowrap;}
           .sp-finance{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 7px;break-inside:avoid;}
+          .sp-bottom{
+            margin-top:auto;
+            display:flex;
+            flex-direction:column;
+            justify-content:flex-end;
+            flex:0 0 auto;
+            break-inside:auto;
+          }
           .sp-detail{display:flex;justify-content:space-between;gap:10px;padding:2.5px 0;}
           .sp-detail strong{text-align:right;white-space:nowrap;}
-          .sp-small{font-size:8px;font-style:italic;margin:1px 0 3px;}
+          .sp-small{font-size:14px;font-style:italic;margin:2px 0 4px;}
           .sp-finance-row{border-top:1px solid #777;margin-top:3px;padding-top:4px;display:flex;justify-content:space-between;gap:8px;font-weight:700;}
-          .sp-total-row{border-top:2px solid #111;margin-top:3px;padding-top:5px;display:flex;justify-content:space-between;align-items:baseline;color:#d71920;font-size:15px;font-weight:900;}
-          .sp-payment-title{font-size:11px;font-weight:900;border:1px solid #888;border-bottom:0;padding:3px 6px;}
+          .sp-total-row{border-top:2px solid #111;margin-top:3px;padding-top:5px;display:flex;justify-content:space-between;align-items:baseline;color:#d71920;font-size:18px;font-weight:900;}
+          .sp-payment-title{font-size:18px;font-weight:900;border:1px solid #888;border-bottom:0;padding:4px 6px;}
           .sp-payment-table{margin-bottom:6px;}
-          .sp-payment-table th,.sp-payment-table td{padding:3px 5px;font-size:8.5px;}
+          .sp-payment-table th,.sp-payment-table td{padding:4px 5px;font-size:16px;}
           .sp-sign{border:1px solid #888;padding:8px 10px;display:grid;grid-template-columns:auto 1fr auto 115px;gap:7px;align-items:end;margin-bottom:5px;font-weight:800;break-inside:avoid;}
           .sp-sign-line{border-bottom:1px solid #111;height:12px;}
-          .sp-disclaimer{border:1px solid #888;padding:4px 7px;font-size:8.5px;margin-bottom:5px;break-inside:avoid;}
-          .sp-footer{text-align:center;font-size:9px;line-height:1.35;font-weight:700;}
+          .sp-disclaimer{border:1px solid #888;padding:5px 7px;font-size:16px;margin-bottom:5px;break-inside:avoid;}
+          .sp-footer{text-align:center;font-size:16px;line-height:1.35;font-weight:700;}
 
           .card{
             box-shadow:none;
@@ -5552,7 +5565,7 @@ const internalNotesHtml = internalNotes.map(n => `
             </div>
           </div>
           <div class="sp-box">
-            <div class="sp-box-title">DELIVERY / PICKUP</div>
+            <div class="sp-box-title">DELIVER TO:</div>
             <div class="sp-address">
               <strong>${escapeHtml(result.customer || "")}</strong>
               ${result.address ? `<br>${escapeHtml(result.address)}` : ""}
@@ -5562,7 +5575,7 @@ const internalNotesHtml = internalNotes.map(n => `
         </section>
 
         <div class="sp-note">
-          <strong>Customer Notes / Delivery Instructions:</strong>
+          <strong>Notes / Instructions:</strong>
           ${escapeHtml(payload.customerNote || "None")}
         </div>
 
@@ -5580,6 +5593,7 @@ const internalNotesHtml = internalNotes.map(n => `
           <tbody>${printItemRows || `<tr><td colspan="6">No items found.</td></tr>`}</tbody>
         </table>
 
+        <div class="sp-bottom">
         <section class="sp-finance">
           <div class="sp-box">
             <div class="sp-box-title">PAYMENT DETAILS</div>
@@ -5630,6 +5644,7 @@ const internalNotesHtml = internalNotes.map(n => `
           NEW MILFORD &bull; 265 Danbury Rd., New Milford, CT 06776 &bull; (860) 355-8722<br>
           DANBURY &bull; 56 Beaver Brook Rd., Danbury, CT 06810 &bull; (203) 792-3030
         </footer>
+        </div>
       </main>
 
       <div class="top">
