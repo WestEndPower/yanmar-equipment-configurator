@@ -18652,6 +18652,7 @@ ${packageFreightNotice ? `
               <div style="position:relative;">
                 <button type="button"
                         class="stihl-info-btn"
+                        data-info-index="${cartIndex}"
                         style="
                           border:1px solid #ccc;
                           background:#fff;
@@ -18948,6 +18949,49 @@ renderCart();
   btn.addEventListener('click', event => {
     event.preventDefault();
     event.stopPropagation();
+
+    const cartIndex = Number(
+      btn.getAttribute('data-info-index')
+    );
+    const freightInput = lines.querySelector(
+      `[data-line-actual-freight="${cartIndex}"]`
+    );
+
+    if(
+      freightInput &&
+      state.cart[cartIndex]
+    ){
+      const raw = clean(freightInput.value);
+      const enteredFreight =
+        raw === ''
+          ? ''
+          : Math.max(Number(raw) || 0, 0);
+
+      if(
+        clean(state.cart[cartIndex].actualFreightCost) !==
+        clean(enteredFreight)
+      ){
+        state.cart[cartIndex].actualFreightCost =
+          enteredFreight;
+
+        renderCart();
+
+        const refreshedButton =
+          lines.querySelector(
+            `.stihl-info-btn[data-info-index="${cartIndex}"]`
+          );
+        const refreshedTip =
+          refreshedButton?.parentElement.querySelector(
+            '.stihl-included-tooltip'
+          );
+
+        if(refreshedTip){
+          refreshedTip.style.display = 'block';
+        }
+
+        return;
+      }
+    }
 
     const tip =
       btn.parentElement.querySelector(
