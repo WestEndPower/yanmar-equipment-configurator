@@ -12712,8 +12712,17 @@ function automaticYanmarPackageFreight(parentLine){
     for the complete package. Do not stack attachment/accessory freight
     on top of that manually entered amount.
   */
-  if(lineActualFreightCost(parentLine) !== null){
-    return 0;
+  const parentActualFreight =
+    lineActualFreightCost(parentLine);
+
+  if(parentActualFreight !== null){
+    return isYanmarAttachmentFreightGroup(
+      freightGroupOf(parentLine)
+    )
+      ? roundCustomerFreight(
+          parentActualFreight
+        )
+      : 0;
   }
 
   const parentSKU =
@@ -12821,9 +12830,16 @@ function freightSummary(){
       })
       .filter(packageInfo =>
         packageInfo.freightLines.length > 0 &&
-        lineActualFreightCost(
-          packageInfo.parentLine
-        ) === null
+        (
+          lineActualFreightCost(
+            packageInfo.parentLine
+          ) === null ||
+          isYanmarAttachmentFreightGroup(
+            freightGroupOf(
+              packageInfo.parentLine
+            )
+          )
+        )
       );
 
   yanmarPackages.forEach(packageInfo => {
