@@ -5467,6 +5467,7 @@ const internalNotesHtml = internalNotes.map(n => `
             min-height:10.1in;
             height:10.1in;
             box-sizing:border-box;
+            position:relative;
             font-family:"Arial Narrow",Arial,sans-serif;
             color:#111;
             font-size:16px;
@@ -5494,11 +5495,14 @@ const internalNotesHtml = internalNotes.map(n => `
           .sp-table .money{text-align:right;white-space:nowrap;}
           .sp-finance{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 7px;break-inside:avoid;}
           .sp-bottom{
-            margin-top:auto;
+            margin-top:0;
             display:flex;
             flex-direction:column;
             justify-content:flex-end;
-            flex:0 0 auto;
+            position:absolute;
+            left:0;
+            right:0;
+            bottom:0;
             break-inside:auto;
           }
           .sp-detail{display:flex;justify-content:space-between;gap:10px;padding:2.5px 0;}
@@ -5530,11 +5534,20 @@ const internalNotesHtml = internalNotes.map(n => `
           table{
             break-inside:avoid;
           }
+
+          .sales-print .sp-table{
+            break-inside:auto;
+          }
+
+          .sales-print .sp-table thead{
+            display:table-header-group;
+          }
         }
       </style>
     </head>
     <body>
       <main class="sales-print">
+        <div class="sp-upper">
         <header class="sp-header">
           <div>
             <div class="sp-logo">
@@ -5592,6 +5605,7 @@ const internalNotesHtml = internalNotes.map(n => `
           </thead>
           <tbody>${printItemRows || `<tr><td colspan="6">No items found.</td></tr>`}</tbody>
         </table>
+        </div>
 
         <div class="sp-bottom">
         <section class="sp-finance">
@@ -6204,6 +6218,58 @@ const internalNotesHtml = internalNotes.map(n => `
       </div>
 
 <script>
+
+function alignPrintedSalesOrder(){
+  const documentPage = document.querySelector('.sales-print');
+  const upperSection = document.querySelector('.sales-print .sp-upper');
+  const bottomSection = document.querySelector('.sales-print .sp-bottom');
+
+  if(!documentPage || !upperSection || !bottomSection){
+    return;
+  }
+
+  const pageHeightInches = 10.1;
+  const cssPixelsPerInch = 96;
+  const pageHeightPixels = pageHeightInches * cssPixelsPerInch;
+  const safetyGapPixels = 14;
+  const temporarilyReveal =
+    window.getComputedStyle(documentPage).display === 'none';
+
+  if(temporarilyReveal){
+    documentPage.style.display = 'flex';
+    documentPage.style.position = 'absolute';
+    documentPage.style.visibility = 'hidden';
+    documentPage.style.width = '7.6in';
+    documentPage.style.left = '-10000px';
+    documentPage.style.top = '0';
+  }
+
+  const requiredHeight =
+    upperSection.scrollHeight +
+    bottomSection.scrollHeight +
+    safetyGapPixels;
+  const pageCount = Math.max(
+    1,
+    Math.ceil(requiredHeight / pageHeightPixels)
+  );
+  const documentHeight = pageCount * pageHeightInches;
+
+  documentPage.style.height = documentHeight + 'in';
+  documentPage.style.minHeight = documentHeight + 'in';
+  documentPage.dataset.printPages = String(pageCount);
+
+  if(temporarilyReveal){
+    documentPage.style.removeProperty('display');
+    documentPage.style.removeProperty('position');
+    documentPage.style.removeProperty('visibility');
+    documentPage.style.removeProperty('width');
+    documentPage.style.removeProperty('left');
+    documentPage.style.removeProperty('top');
+  }
+}
+
+window.addEventListener('beforeprint', alignPrintedSalesOrder);
+window.addEventListener('load', alignPrintedSalesOrder);
 
 async function editQuoteCustomerNote(){
 
