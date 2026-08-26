@@ -12838,6 +12838,15 @@ function automaticYanmarPackageFreight(parentLine){
 }
 
 function freightSummary(){
+  if(!configuratorHasCapability('freightRules', true)){
+    return {
+      total: 0,
+      rows: [],
+      confirmations: [],
+      debug: []
+    };
+  }
+
   let rows = [];
   const debug = [];
   const confirmations = [];
