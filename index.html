@@ -6091,22 +6091,49 @@ if(publicLinkCategory && $('stihl-category')){
 }
 
 function configuratorBrandId(){
-  const row = (state.tools || []).find(item => clean(item.BrandID));
-  return clean(row?.BrandID).toUpperCase() || 'BRAND';
-}
+  const row = (state.tools || []).find(item =>
+    clean(item.BrandID)
+  );
+  const dataBrandId = clean(row?.BrandID).toUpperCase();
+  const api = window.WestEndConfiguratorBrand;
+  const profile =
+    dataBrandId &&
+    api &&
+    typeof api.getBrandProfile === 'function'
+      ? api.getBrandProfile(dataBrandId)
+      : null;
 
+  return clean(profile?.id).toUpperCase() ||
+    dataBrandId ||
+    'BRAND';
+}
 function configuratorBrandName(){
   const row = (state.tools || []).find(item =>
     clean(item.BrandName) || clean(item.BrandID)
   );
+  const dataBrandId = clean(row?.BrandID).toUpperCase();
+  const api = window.WestEndConfiguratorBrand;
+  const profile =
+    dataBrandId &&
+    api &&
+    typeof api.getBrandProfile === 'function'
+      ? api.getBrandProfile(dataBrandId)
+      : null;
+
+  if(clean(profile?.name)) return clean(profile.name);
+
   const explicit = clean(row?.BrandName);
   const id = clean(row?.BrandID);
+
   if(explicit) return explicit;
+
   return id
-    ? id.toLowerCase().replace(/(^|[\s_-])\w/g, value => value.toUpperCase())
+    ? id.toLowerCase().replace(
+        /(^|[\s_-])\w/g,
+        value => value.toUpperCase()
+      )
     : 'Equipment';
 }
-
 function configuratorBaseUrl(){
   return new URL('./', window.location.href).href.split('?')[0].split('#')[0];
 }
@@ -20260,14 +20287,33 @@ function configuratorBrandId(){
   const row = (state.tools || []).find(item =>
     clean(item.BrandID)
   );
+  const dataBrandId = clean(row?.BrandID).toUpperCase();
+  const api = window.WestEndConfiguratorBrand;
+  const profile =
+    dataBrandId &&
+    api &&
+    typeof api.getBrandProfile === 'function'
+      ? api.getBrandProfile(dataBrandId)
+      : null;
 
-  return clean(row?.BrandID).toUpperCase() || 'BRAND';
+  return clean(profile?.id).toUpperCase() ||
+    dataBrandId ||
+    'BRAND';
 }
-
 function configuratorBrandName(){
   const row = (state.tools || []).find(item =>
     clean(item.BrandName) || clean(item.BrandID)
   );
+  const dataBrandId = clean(row?.BrandID).toUpperCase();
+  const api = window.WestEndConfiguratorBrand;
+  const profile =
+    dataBrandId &&
+    api &&
+    typeof api.getBrandProfile === 'function'
+      ? api.getBrandProfile(dataBrandId)
+      : null;
+
+  if(clean(profile?.name)) return clean(profile.name);
 
   const explicit = clean(row?.BrandName);
   const id = clean(row?.BrandID);
@@ -20281,7 +20327,6 @@ function configuratorBrandName(){
       )
     : 'Equipment';
 }
-
 function dealerSessionStorageKey(){
   return `${configuratorBrandId().toLowerCase()}DealerSessionToken`;
 }
