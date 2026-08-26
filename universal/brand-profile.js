@@ -65,10 +65,26 @@
     return profile;
   }
 
+  function hasCapability(brandId, capability, fallbackValue) {
+    const profile = getBrandProfile(brandId);
+    const key = String(capability || '').trim();
+
+    if(
+      !profile ||
+      !key ||
+      !Object.prototype.hasOwnProperty.call(profile.capabilities, key)
+    ){
+      return fallbackValue !== false;
+    }
+
+    return profile.capabilities[key] === true;
+  }
+
   return Object.freeze({
     SCHEMA_VERSION,
     profiles,
     getBrandProfile,
-    requireBrandProfile
+    requireBrandProfile,
+    hasCapability
   });
 });
