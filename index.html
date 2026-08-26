@@ -20346,6 +20346,8 @@ function dealerSessionStorageKey(){
 }
 
 function dealerMode(on){
+  on = Boolean(on) &&
+    configuratorHasCapability('dealerMode', true);
 // Disable all GA4 tracking while dealer mode is active.
   const analyticsHost =
     String(window.location.hostname || '')
