@@ -4807,6 +4807,7 @@ function financeProgramFeeIsAllowed(
 }
 
 function bestPromoFinanceForTool(t){
+  if(!configuratorHasCapability('promotions', true)) return null;
   if(!t) return null;
 
   const sku = clean(t.StihlID) || skuOf(t);
@@ -4910,7 +4911,7 @@ const activeRebate =
 }
 
 function rebateToCustomerOf(item){
-
+  if(!configuratorHasCapability('promotions', true)) return 0;
   if(!item) return 0;
 
   const rebate =
@@ -7642,6 +7643,10 @@ function renderCategories(){
     }
 
     function toolHasCurrentPromotion(tool){
+
+  if(!configuratorHasCapability('promotions', true)){
+    return false;
+  }
 
   if(!tool){
     return false;
