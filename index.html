@@ -6949,6 +6949,11 @@ if(viewQuote){
 
   viewQuote.addEventListener('click', () => {
 
+    if(!configuratorHasCapability('quotes', true)){
+      alert('Quotes are not available for this brand.');
+      return;
+    }
+
     const cashAmount =
       money(
         $('stihl-cash-payment')?.value
