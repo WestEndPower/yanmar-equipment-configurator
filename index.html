@@ -20327,6 +20327,20 @@ function configuratorBrandName(){
       )
     : 'Equipment';
 }
+function configuratorHasCapability(capability, fallbackValue){
+  const api = window.WestEndConfiguratorBrand;
+  const fallback = fallbackValue !== false;
+
+  if(!api || typeof api.hasCapability !== 'function'){
+    return fallback;
+  }
+
+  return api.hasCapability(
+    configuratorBrandId(),
+    capability,
+    fallback
+  );
+}
 function dealerSessionStorageKey(){
   return `${configuratorBrandId().toLowerCase()}DealerSessionToken`;
 }
