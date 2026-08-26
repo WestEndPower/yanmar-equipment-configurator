@@ -14240,6 +14240,10 @@ function minimumDownRequirementLabel(program){
 
 function selectedCustomerFinanceProgram(){
 
+  if(!configuratorHasCapability('financing', true)){
+    return null;
+  }
+
   const standardId =
     clean($('stihl-financing-select')?.value);
 
@@ -14699,6 +14703,28 @@ function renderFinancingOptions(){
   if(!select){
     return;
   }
+
+  if(!configuratorHasCapability('financing', true)){
+    clearSelectedFinancingProgram();
+    select.disabled = true;
+    select.innerHTML =
+      '<option value="">Financing is not available for this brand</option>';
+
+    if(inLieuSelect){
+      inLieuSelect.disabled = true;
+      inLieuSelect.innerHTML =
+        '<option value="">Financing is not available for this brand</option>';
+    }
+
+    if(inLieuWrap){
+      inLieuWrap.style.display = 'none';
+    }
+
+    return;
+  }
+
+  select.disabled = false;
+  if(inLieuSelect) inLieuSelect.disabled = false;
 
   const total = currentQuoteTotal();
 
