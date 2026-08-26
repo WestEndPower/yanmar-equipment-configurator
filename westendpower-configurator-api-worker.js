@@ -38,6 +38,11 @@ const SUPPORTED_BRANDS = Object.freeze({
   TORO: Object.freeze({
     brandName:"Toro",
     configuratorTitle:"Toro Equipment Configurator"
+  }),
+
+  GREENWORKS: Object.freeze({
+    brandName:"Greenworks",
+    configuratorTitle:"Greenworks Equipment Configurator"
   })
 });
 
@@ -2177,6 +2182,263 @@ async function handleCustomerFinancePrograms(
   }
 }
 
+/*
+  Shared customer-document renderer for STIHL, Honda and future brands.
+  Each configurator keeps its own pricing logic and exposes the same quoteData
+  document model. Add a brand adapter here without copying the print layout.
+*/
+function westEndSharedQuoteDocument(){
+  "use strict";
+
+  const data =
+    typeof quoteData !== "undefined" && quoteData
+      ? quoteData
+      : JSON.parse(sessionStorage.getItem("stihlQuoteData") || "{}");
+  const customer = data.customer || {};
+  const totals = data.totals || {};
+  const payment = data.payment || {};
+  const sale = data.sale || {};
+  const lines = Array.isArray(data.lines) ? data.lines : [];
+  const brandAdapters = Object.freeze({
+    STIHL:{name:"STIHL",sku:["StihlID","STIHL ID","SKU","PartNumber","Part Number","Model"]},
+    HONDA:{name:"Honda",sku:["SKU","HondaID","Honda ID","Model","PartNumber","Part Number"]},
+    YANMAR:{name:"Yanmar",sku:["SKU","YanmarID","Yanmar ID","Model","PartNumber","Part Number"]},
+    TORO:{name:"Toro",sku:["SKU","ToroID","Toro ID","Model","PartNumber","Part Number"]},
+    GREENWORKS:{name:"Greenworks",sku:["SKU","GreenworksID","Greenworks ID","Model","PartNumber","Part Number"]}
+  });
+
+  const clean = value => String(value ?? "").trim();
+  const amount = value => {
+    const number = Number(clean(value).replace(/[$,]/g,""));
+    return Number.isFinite(number) ? number : 0;
+  };
+  const currency = value => amount(value).toLocaleString("en-US",{
+    style:"currency",currency:"USD"
+  });
+  const escape = value => clean(value)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/'/g,"&#039;");
+  const text = id => clean(document.getElementById(id)?.textContent);
+  const field = (object, names) => {
+    for(const name of names){
+      if(clean(object?.[name])) return clean(object[name]);
+    }
+    return "";
+  };
+
+  const configuredBrand = clean(data.document?.brandId || data.brandId).toUpperCase();
+  const pathBrand = location.pathname.toUpperCase().includes("HONDA")
+    ? "HONDA"
+    : location.pathname.toUpperCase().includes("YANMAR")
+      ? "YANMAR"
+      : "STIHL";
+  const brandId = brandAdapters[configuredBrand] ? configuredBrand : pathBrand;
+  const adapter = brandAdapters[brandId];
+
+  const sourceLines = lines.length
+    ? lines
+    : Array.isArray(data.state?.cart)
+      ? data.state.cart.filter(line => line && line.item && !line.requiredItem)
+      : [];
+  const itemRows = sourceLines.filter(line => !line.included).map(line => {
+    const item = line.item || line;
+    const qty = Math.max(Number(line.qty) || 1,1);
+    const original = amount(line.originalLineTotal) ||
+      (amount(item.SalePrice) || amount(item.MSRP) || amount(line.price)) * qty;
+    const discountParts =
+      amount(line.paymentDiscount) + amount(line.factoryRebate) +
+      amount(line.manualCustomerDiscount) + amount(line.bidFleetDiscount);
+    const discount = amount(line.totalDiscount) || discountParts;
+    const final = amount(line.finalLineTotal) || Math.max(original - discount,0);
+    return {
+      qty,
+      sku:field(item,adapter.sku) || clean(line.sku),
+      description:field(item,["Description","Name","ProductName","Model","BatteryName","ChargerName"]) || clean(line.name) || "Item",
+      unit:qty > 0 ? original / qty : original,
+      discount:Math.max(original - final,discount,0),
+      total:final
+    };
+  });
+
+  const stateObject = typeof documentState !== "undefined" ? documentState : {};
+  const allPayments = Array.isArray(stateObject.payments)
+    ? stateObject.payments
+    : Array.isArray(sale.payments)
+      ? sale.payments
+      : Array.isArray(data.payments)
+        ? data.payments
+        : [];
+  const activePayments = allPayments.filter(entry =>
+    clean(entry.status || "received").toLowerCase() !== "voided"
+  );
+  const paid = activePayments.reduce((sum,entry) => sum + amount(entry.amount),0);
+  const equipmentSubtotal = itemRows.reduce((sum,row) => sum + row.total,0);
+  const freightObject = totals.freight && typeof totals.freight === "object"
+    ? totals.freight
+    : {total:totals.freight};
+  const freight = amount(freightObject.total);
+  const setup = amount(totals.setupInstallation);
+  const delivery = amount(totals.delivery);
+  const tax = amount(text("quote-tax") || totals.tax || data.tax);
+  const outTheDoor = amount(text("quote-total") || totals.total || data.total);
+  const subtotal = outTheDoor > 0
+    ? Math.max(outTheDoor - tax,0)
+    : equipmentSubtotal + freight + setup + delivery;
+  const financed = amount(payment.financed);
+  const selectedCustomerContribution =
+    amount(payment.cash) + amount(payment.credit) || Math.max(outTheDoor - financed,0);
+  const remainingCustomerBalance = Math.max(selectedCustomerContribution - paid,0);
+  const orderNumber = clean(stateObject.orderNumber || sale.orderNumber || data.orderNumber);
+  const documentNumber = orderNumber || text("quote-number") || clean(data.document?.quoteNumber);
+  const balanceDue = outTheDoor > 0 ? Math.max(outTheDoor - paid - financed,0) : 0;
+  const documentTitle = paid > 0 && balanceDue <= .009
+    ? "FINAL SALES RECEIPT"
+    : orderNumber || paid > 0
+      ? "SALES ORDER / PAYMENT RECEIPT"
+      : "QUOTE";
+
+  const business = clean(customer.business);
+  const customerName = clean(customer.name || customer.customer);
+  const customerDisplayName = business || customerName;
+  const customerSecondary = business && customerName
+    ? `Contact: ${escape(customerName)}${customer.email ? ` / ${escape(customer.email)}` : ""}`
+    : escape(customer.email);
+  const customerStreet = clean(customer.street);
+  const customerCityStateZip = [customer.city,customer.state,customer.zip]
+    .map(clean).filter(Boolean).join(" ");
+  const deliveryDetails = data.deliveryDetails || data.delivery || {};
+  const deliveryBusiness = clean(deliveryDetails.business);
+  const deliveryName = clean(deliveryDetails.name || deliveryDetails.contactName);
+  const deliveryDisplayName = clean(deliveryDetails.displayName) || deliveryBusiness || deliveryName || customerDisplayName;
+  const deliverySecondary = (deliveryBusiness || (deliveryName && deliveryName !== deliveryDisplayName))
+    ? `Contact: ${escape(deliveryName)}${deliveryDetails.email ? ` / ${escape(deliveryDetails.email)}` : ""}`
+    : escape(deliveryDetails.email || customer.email);
+  const deliveryStreet = clean(deliveryDetails.street) || customerStreet;
+  const deliveryCityStateZip = clean(deliveryDetails.cityStateZip) ||
+    [deliveryDetails.city,deliveryDetails.state,deliveryDetails.zip]
+      .map(clean).filter(Boolean).join(" ") || customerCityStateZip;
+  const deliveryPhone = clean(deliveryDetails.phone) || clean(customer.phone);
+
+  const additionalPaymentRows = Math.max(activePayments.length - 1,0);
+  const rowsPerPage = Math.max(6,10 - additionalPaymentRows);
+  const pages = [];
+  for(let index=0; index<Math.max(itemRows.length,1); index += rowsPerPage){
+    pages.push(itemRows.slice(index,index + rowsPerPage));
+  }
+
+  const itemTable = rows => {
+    const blanks = Array.from({length:Math.max(rowsPerPage - rows.length,0)},() =>
+      `<tr class="wep-empty"><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`
+    ).join("");
+    return `<table class="wep-doc-table"><thead><tr>
+      <th style="width:5%">QTY</th><th style="width:17%">SKU</th><th>DESCRIPTION</th>
+      <th style="width:15%">UNIT PRICE</th><th style="width:13%">DISCOUNT</th><th style="width:16%">LINE TOTAL</th>
+    </tr></thead><tbody>${rows.map(row => `<tr>
+      <td class="center">${row.qty}</td><td>${escape(row.sku)}</td><td>${escape(row.description)}</td>
+      <td class="money">${currency(row.unit)}</td><td class="money">${currency(row.discount)}</td><td class="money">${currency(row.total)}</td>
+    </tr>`).join("")}${blanks}</tbody></table>`;
+  };
+
+  const paymentHistory = activePayments.length ? `<div class="wep-payment-title">PAYMENT HISTORY</div>
+    <table class="wep-doc-table wep-payment-table"><thead><tr>
+      <th>DATE</th><th>PAYMENT TYPE</th><th>REFERENCE</th><th>AMOUNT</th><th>RECEIVED BY</th>
+    </tr></thead><tbody>${activePayments.map(entry => `<tr>
+      <td>${escape(entry.date)}</td><td>${escape(entry.method || entry.methodKey || "Payment")}</td>
+      <td>${escape(entry.reference || "-")}</td><td class="money">${currency(entry.amount)}</td><td>${escape(entry.receivedBy)}</td>
+    </tr>`).join("")}</tbody></table>` : "";
+
+  const bottom = `<section class="wep-finance">
+    <div class="wep-box"><div class="wep-box-title">PAYMENT DETAILS</div>
+      <div class="wep-detail"><span>Minimum Down Payment / Deposit</span><strong>${currency(payment.requiredDown)}</strong></div>
+      <div class="wep-detail"><span>Amount Paid</span><strong>${currency(paid)}</strong></div>
+      <div class="wep-detail"><span>Remaining Customer Balance Due</span><strong>${currency(remainingCustomerBalance)}</strong></div>
+      ${financed > 0 ? `<div class="wep-detail"><span>Amount Financed</span><strong>${currency(financed)}</strong></div>
+      <div class="wep-small">Bank application fee: ${currency(payment.applicationFee)} &bull; Financed amount with fee: ${currency(payment.principalWithFees || financed + amount(payment.applicationFee))}</div>
+      <div class="wep-finance-row"><span>${escape(payment.program || "Financing")}</span><span>Estimated Payment ${currency(payment.monthlyPayment)}/mo${amount(payment.termMonths) ? ` &times; ${escape(payment.termMonths)}` : ""}</span></div>` : ""}
+    </div>
+    <div class="wep-box">
+      <div class="wep-detail"><span>Equipment Subtotal</span><strong>${currency(equipmentSubtotal)}</strong></div>
+      <div class="wep-detail"><span>${escape(freightObject.label || "Factory Freight")}</span><strong>${currency(freight)}</strong></div>
+      <div class="wep-detail"><span>Setup / Installation</span><strong>${currency(setup)}</strong></div>
+      <div class="wep-detail"><span>Delivery / Pickup</span><strong>${totals.deliveryIncluded ? "Included" : currency(delivery)}</strong></div>
+      <div class="wep-detail"><span>Subtotal</span><strong>${currency(subtotal)}</strong></div>
+      <div class="wep-detail"><span>Sales Tax</span><strong>${currency(tax)}</strong></div>
+      <div class="wep-total"><span>OUT-THE-DOOR PRICE</span><span>${currency(outTheDoor)}</span></div>
+    </div>
+  </section>${paymentHistory}
+  <div class="wep-sign"><span>Customer Signature:</span><span class="wep-sign-line"></span><span>Date:</span><span class="wep-sign-line"></span></div>
+  <div class="wep-disclaimer"><strong>SPECIAL ORDERS:</strong> Special-order items cannot be cancelled or returned after the order is placed. Availability and delivery dates are estimates and subject to manufacturer confirmation.<br><strong>${documentTitle === "QUOTE" ? "Quote valid for 30 days. Pricing, promotions, financing, freight, and availability are subject to verification and may change." : "Sales order is subject to final product availability and manufacturer confirmation."}</strong></div>
+  <footer class="wep-footer">
+    NEW MILFORD &bull; 265 Danbury Rd., New Milford, CT 06776 &bull; (860) 355-8722 &bull; sales@westendpower.com<br>
+    DANBURY &bull; 56 Beaver Brook Rd., Danbury, CT 06810 &bull; (203) 792-3030 &bull; dawepe@westendpower.com<br>
+    westendpower.com
+  </footer>`;
+
+  const header = `<header class="wep-header"><div>
+    <div class="wep-logo"><div class="wep-logo-main">WEST END</div><div class="wep-logo-sub">Power Equipment Company</div></div>
+    <div class="wep-title">${escape(documentTitle)}</div></div>
+    <div class="wep-meta"><strong>${orderNumber ? "Sales Order #:" : "Quote #:"}</strong><span>${escape(documentNumber)}</span>
+      <strong>Order Date:</strong><span>${escape(text("quote-date") || new Date().toLocaleDateString())}</span>
+      <strong>Customer ID:</strong><span>${escape(customer.id || "-")}</span>
+      <strong>Salesperson:</strong><span>${escape(customer.salesperson || text("quote-salesperson") || "-")}</span>
+      <strong>Phone:</strong><span>NM (860) 355-8722 / Danbury (203) 792-3030</span>
+      <strong>Email:</strong><span>sales@westendpower.com / dawepe@westendpower.com</span>
+    </div></header>
+    <section class="wep-two">
+      <div class="wep-box"><div class="wep-box-title">SOLD TO</div><div class="wep-address">
+        <div class="wep-address-head"><strong>${escape(customerDisplayName)}</strong><span>${escape(customer.phone)}</span></div>
+        <div class="wep-address-sub">${customerSecondary}</div>${escape(customerStreet)}<br>${escape(customerCityStateZip)}</div></div>
+      <div class="wep-box"><div class="wep-box-title">DELIVER TO</div><div class="wep-address">
+        <div class="wep-address-head"><strong>${escape(deliveryDisplayName)}</strong><span>${escape(deliveryPhone)}</span></div>
+        <div class="wep-address-sub">${deliverySecondary}</div>${escape(deliveryStreet)}<br>${escape(deliveryCityStateZip)}</div></div>
+    </section>
+    <div class="wep-note"><strong>Notes / Instructions:</strong> ${escape(customer.notes || data.customerNote || "None")}</div>`;
+
+  let root = document.getElementById("wep-shared-print-root");
+  if(!root){
+    root = document.createElement("main");
+    root.id = "wep-shared-print-root";
+    document.body.appendChild(root);
+  }
+  root.innerHTML = pages.map((rows,index) => `<section class="wep-print-page">
+    ${index === 0 ? header : `<div class="wep-continuation">${escape(documentTitle)} &mdash; ${escape(documentNumber)} &mdash; Equipment Continued</div>`}
+    ${itemTable(rows)}${index === pages.length - 1 ? bottom : ""}</section>`).join("");
+}
+
+function installWestEndSharedQuoteDocument(){
+  if(!document.getElementById("wep-shared-print-style")){
+    const style = document.createElement("style");
+    style.id = "wep-shared-print-style";
+    style.textContent = `
+      #wep-shared-print-root{display:none}
+      @media print{
+        @page{size:letter portrait;margin:.45in}
+        body>*:not(#wep-shared-print-root){display:none!important}
+        #wep-shared-print-root{display:block!important;width:100%;font-family:"Arial Narrow",Arial,sans-serif;color:#111;font-size:15px;line-height:1.16}
+        .wep-print-page{break-after:page;page-break-after:always}.wep-print-page:last-child{break-after:auto;page-break-after:auto}
+        .wep-header{display:grid;grid-template-columns:1.2fr 1fr;gap:16px;align-items:start;margin-bottom:7px}
+        .wep-logo{display:inline-block;border:3px solid #111;outline:2px solid #d71920;outline-offset:-6px;padding:7px 14px 8px;transform:skew(-2deg)}
+        .wep-logo-main{font-size:32px;line-height:.95;font-weight:900;letter-spacing:1px;color:#d71920;text-shadow:1px 1px 0 #111,-1px -1px 0 #111;white-space:nowrap}
+        .wep-logo-sub{font-family:Georgia,serif;font-size:15px;line-height:1;font-weight:700;font-style:italic;text-align:center;margin-top:5px}
+        .wep-title{font-size:20px;font-weight:900;margin:7px 0 0}.wep-meta{display:grid;grid-template-columns:125px 1fr;gap:3px 7px;font-size:14px}.wep-meta strong{font-weight:800}
+        .wep-two{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:6px}.wep-box{border:1px solid #777;padding:5px 7px;break-inside:avoid;box-sizing:border-box}.wep-two .wep-box{height:112px;overflow:hidden}
+        .wep-box-title{font-size:17px;font-weight:900;border-bottom:1px solid #888;padding-bottom:2px;margin-bottom:3px}.wep-address{height:78px;overflow:hidden;font-size:15px;line-height:1.25}
+        .wep-address-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px}.wep-address-head span{margin-left:auto;text-align:right;white-space:nowrap}.wep-address-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .wep-note{border:1px solid #999;padding:3px 6px;margin:0 0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .wep-doc-table{width:100%;border-collapse:collapse;margin:0 0 6px}.wep-doc-table th,.wep-doc-table td{border:1px solid #999;padding:4px 5px;font-size:14px;line-height:1.12}
+        .wep-doc-table th{background:#d71920!important;color:#fff!important;text-align:center;font-weight:900;-webkit-print-color-adjust:exact;print-color-adjust:exact}.wep-doc-table .center{text-align:center}.wep-doc-table .money{text-align:right;white-space:nowrap}.wep-empty td{height:17px}
+        .wep-continuation{font-size:18px;font-weight:900;margin:0 0 7px;border-bottom:2px solid #d71920;padding-bottom:5px}.wep-finance{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:0 0 6px;break-inside:avoid}
+        .wep-detail{display:flex;justify-content:space-between;gap:8px;padding:2px 0}.wep-detail strong{text-align:right;white-space:nowrap}.wep-small{font-size:12px;font-style:italic;margin:2px 0 3px}.wep-finance-row{border-top:1px solid #777;margin-top:2px;padding-top:3px;display:flex;justify-content:space-between;gap:7px;font-weight:700;font-size:13px}
+        .wep-total{border-top:2px solid #111;margin-top:3px;padding-top:4px;display:flex;justify-content:space-between;color:#d71920;font-size:17px;font-weight:900}.wep-payment-title{font-size:16px;font-weight:900;border:1px solid #888;border-bottom:0;padding:3px 5px}.wep-payment-table th,.wep-payment-table td{padding:3px 4px;font-size:13px}
+        .wep-sign{border:1px solid #888;padding:7px 9px;display:grid;grid-template-columns:auto 1fr auto 105px;gap:6px;align-items:end;margin-bottom:4px;font-weight:800;break-inside:avoid}.wep-sign-line{border-bottom:1px solid #111;height:11px}
+        .wep-disclaimer{border:1px solid #888;padding:4px 6px;font-size:13px;margin-bottom:4px;break-inside:avoid}.wep-footer{text-align:center;font-size:12px;line-height:1.3;font-weight:700}
+      }`;
+    document.head.appendChild(style);
+  }
+  westEndSharedQuoteDocument();
+  window.addEventListener("beforeprint",westEndSharedQuoteDocument);
+}
+
 export default {
   async fetch(request, env) {
     const corsHeaders = browserCorsHeaders(request);
@@ -2190,6 +2452,24 @@ export default {
 }
 
 const url = new URL(request.url);
+
+if(
+  url.pathname === "/shared-quote-document.js" &&
+  request.method === "GET"
+){
+  return new Response(
+    `const westEndSharedQuoteDocument = ${westEndSharedQuoteDocument.toString()};\n` +
+    `const installWestEndSharedQuoteDocument = ${installWestEndSharedQuoteDocument.toString()};\n` +
+    `if(document.readyState === "loading"){document.addEventListener("DOMContentLoaded",installWestEndSharedQuoteDocument,{once:true});}else{installWestEndSharedQuoteDocument();}\n`,
+    {
+      headers:{
+        "Content-Type":"application/javascript; charset=UTF-8",
+        "Cache-Control":"public, max-age=300",
+        "X-Content-Type-Options":"nosniff"
+      }
+    }
+  );
+}
 
 if(request.method === "POST"){
 
@@ -5132,7 +5412,53 @@ async function handleQuoteDetail(env, id) {
     payload = {};
   }
 
-  const items = Array.isArray(payload.items) ? payload.items : [];
+  const detailedQuoteLines = Array.isArray(payload.lines)
+    ? payload.lines
+        .filter(line => line && !line.included)
+        .map(line => {
+          const product =
+            line.item && typeof line.item === "object"
+              ? line.item
+              : {};
+          const quantity = Math.max(Number(line.qty) || 1, 1);
+          const originalLineTotal = quoteMoney(line.originalLineTotal);
+          const finalLineTotal = quoteMoney(
+            line.finalLineTotal ?? line.lineTotal
+          );
+
+          return {
+            ...line,
+            qty:quantity,
+            sku:String(
+              line.sku ||
+              product.StihlID ||
+              product.SKU ||
+              product.Model ||
+              product.model ||
+              ""
+            ).trim(),
+            name:String(
+              line.name ||
+              product.Description ||
+              product.Name ||
+              product.ProductName ||
+              product.Model ||
+              ""
+            ).trim(),
+            price:
+              originalLineTotal > 0
+                ? originalLineTotal / quantity
+                : quoteMoney(line.price),
+            originalLineTotal,
+            lineTotal:finalLineTotal
+          };
+        })
+    : [];
+  const items = detailedQuoteLines.length
+    ? detailedQuoteLines
+    : Array.isArray(payload.items)
+      ? payload.items
+      : [];
   const trade = payload.trade || null;
   const savedTotals =
     payload.totals && typeof payload.totals === "object"
@@ -5182,6 +5508,28 @@ async function handleQuoteDetail(env, id) {
     cityStateZip:String(savedDeliveryDetails.cityStateZip || customerMailing.cityStateZip).trim(),
     phone:String(savedDeliveryDetails.phone || customerMailing.phone).trim(),
     email:String(savedDeliveryDetails.email || customerMailing.email).trim()
+  };
+  const customerIsBusiness = Boolean(String(result.business || "").trim());
+  const deliveryIsBusiness = Boolean(
+    String(savedDeliveryDetails.business || "").trim() ||
+    (
+      customerIsBusiness &&
+      deliveryMailing.displayName === customerMailing.displayName
+    ) ||
+    (
+      deliveryMailing.contactName &&
+      deliveryMailing.contactName !== deliveryMailing.displayName
+    )
+  );
+  const printMailingSecondaryLine = (mailing, isBusiness) => {
+    const contact = String(mailing.contactName || "").trim();
+    const email = String(mailing.email || "").trim();
+
+    if(isBusiness && contact){
+      return `Contact: ${escapeHtml(contact)}${email ? ` / ${escapeHtml(email)}` : ""}`;
+    }
+
+    return escapeHtml(email);
   };
   const notesResult = await env.QUOTES_DB.prepare(`
   SELECT
@@ -5421,21 +5769,31 @@ const internalNotesHtml = internalNotes.map(n => `
       originalLineTotal > 0 ? originalLineTotal - lineTotal : 0,
       0
     );
+    const displayUnitPrice =
+      originalLineTotal > 0
+        ? originalLineTotal / quantity
+        : unitPrice + (discount / quantity);
 
     return `
       <tr>
         <td class="center">${escapeHtml(quantity)}</td>
         <td>${escapeHtml(item.sku || item.model || "")}</td>
         <td>${escapeHtml(item.name || "")}</td>
-        <td class="money">${escapeHtml(quoteCurrency(unitPrice))}</td>
+        <td class="money">${escapeHtml(quoteCurrency(displayUnitPrice))}</td>
         <td class="money">${escapeHtml(quoteCurrency(discount))}</td>
         <td class="money">${escapeHtml(quoteCurrency(lineTotal))}</td>
       </tr>
     `;
   });
 
+  const printedEquipmentSubtotal = printableItems.reduce(
+    (sum, item) =>
+      sum + quoteMoney(item.repricedLineTotal ?? item.lineTotal),
+    0
+  );
+
   const additionalPaymentRows = Math.max(activePayments.length - 1, 0);
-  const printItemsPerPage = Math.max(6, 12 - additionalPaymentRows);
+  const printItemsPerPage = Math.max(6, 10 - additionalPaymentRows);
   const printItemPageCount = Math.max(
     1,
     Math.ceil(printItemRowList.length / printItemsPerPage)
@@ -5561,12 +5919,14 @@ const internalNotesHtml = internalNotes.map(n => `
           .sp-meta{display:grid;grid-template-columns:135px 1fr;gap:4px 8px;font-size:16px;}
           .sp-meta strong{font-weight:800;}
           .sp-two{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:7px;}
-          .sp-box{border:1px solid #777;padding:6px 8px;break-inside:avoid;}
+          .sp-box{border:1px solid #777;padding:6px 8px;break-inside:avoid;box-sizing:border-box;}
+          .sp-two .sp-box{height:118px;overflow:hidden;}
           .sp-box-title{font-size:18px;font-weight:900;border-bottom:1px solid #888;padding-bottom:2px;margin-bottom:4px;}
-          .sp-address{min-height:48px;font-size:16px;line-height:1.28;}
+          .sp-address{height:82px;overflow:hidden;font-size:16px;line-height:1.28;}
           .sp-address strong{font-size:16px;}
           .sp-address-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;}
           .sp-address-head span{margin-left:auto;text-align:right;white-space:nowrap;}
+          .sp-address-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
           .sp-note{border:1px solid #999;padding:4px 7px;margin:0 0 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
           .sp-note strong{font-weight:900;}
           .sp-table{width:100%;border-collapse:collapse;margin:0 0 7px;break-inside:auto;}
@@ -5641,8 +6001,8 @@ const internalNotesHtml = internalNotes.map(n => `
             <strong>Order Date:</strong><span>${escapeHtml(formatDate(result.created_at))}</span>
             <strong>Customer ID:</strong><span>${escapeHtml(result.customer_id || "-")}</span>
             <strong>Salesperson:</strong><span>${escapeHtml(result.salesperson || "-")}</span>
-            <strong>Phone:</strong><span>${escapeHtml(result.phone || "-")}</span>
-            <strong>Email:</strong><span>${escapeHtml(result.email || "-")}</span>
+            <strong>Phone:</strong><span>NM (860) 355-8722 / Danbury (203) 792-3030</span>
+            <strong>Email:</strong><span>sales@westendpower.com</span>
           </div>
         </header>
 
@@ -5651,18 +6011,18 @@ const internalNotesHtml = internalNotes.map(n => `
             <div class="sp-box-title">SOLD TO</div>
             <div class="sp-address">
               <div class="sp-address-head"><strong>${escapeHtml(customerMailing.displayName)}</strong><span>${escapeHtml(customerMailing.phone)}</span></div>
+              <div class="sp-address-sub">${printMailingSecondaryLine(customerMailing, customerIsBusiness)}</div>
               ${escapeHtml(customerMailing.street)}<br>
-              ${escapeHtml(customerMailing.cityStateZip)}<br>
-              ${escapeHtml([customerMailing.contactName, customerMailing.email].filter(Boolean).join(" / "))}
+              ${escapeHtml(customerMailing.cityStateZip)}
             </div>
           </div>
           <div class="sp-box">
             <div class="sp-box-title">DELIVER TO:</div>
             <div class="sp-address">
               <div class="sp-address-head"><strong>${escapeHtml(deliveryMailing.displayName)}</strong><span>${escapeHtml(deliveryMailing.phone)}</span></div>
+              <div class="sp-address-sub">${printMailingSecondaryLine(deliveryMailing, deliveryIsBusiness)}</div>
               ${escapeHtml(deliveryMailing.street)}<br>
-              ${escapeHtml(deliveryMailing.cityStateZip)}<br>
-              ${escapeHtml([deliveryMailing.contactName, deliveryMailing.email].filter(Boolean).join(" / "))}
+              ${escapeHtml(deliveryMailing.cityStateZip)}
             </div>
           </div>
         </section>
@@ -5680,9 +6040,8 @@ const internalNotesHtml = internalNotes.map(n => `
           <div class="sp-box">
             <div class="sp-box-title">PAYMENT DETAILS</div>
             <div class="sp-detail"><span>Minimum Down Payment / Deposit</span><strong>${escapeHtml(quoteCurrency(savedPaymentPlan.requiredDown))}</strong></div>
-            <div class="sp-detail"><span>Deposit Amount</span><strong>${escapeHtml(quoteCurrency(selectedDeposit))}</strong></div>
             <div class="sp-detail"><span>Amount Paid</span><strong>${escapeHtml(quoteCurrency(totalReceived))}</strong></div>
-            <div class="sp-detail"><span>Balance Due</span><strong>${escapeHtml(quoteCurrency(depositBalance))}</strong></div>
+            <div class="sp-detail"><span>Remaining Customer Balance Due</span><strong>${escapeHtml(quoteCurrency(depositBalance))}</strong></div>
             ${quoteMoney(savedPaymentPlan.financed) > 0 ? `
               <div class="sp-detail"><span>Amount Financed</span><strong>${escapeHtml(quoteCurrency(savedPaymentPlan.financed))}</strong></div>
               <div class="sp-small">Bank application fee: ${escapeHtml(quoteCurrency(savedPaymentPlan.applicationFee))} &bull; Financed amount with fee: ${escapeHtml(quoteCurrency(savedPaymentPlan.principalWithFees))}</div>
@@ -5694,7 +6053,7 @@ const internalNotesHtml = internalNotes.map(n => `
           </div>
 
           <div class="sp-box">
-            <div class="sp-detail"><span>Equipment Subtotal</span><strong>${escapeHtml(quoteCurrency(savedTotals.equipmentSubtotal ?? result.subtotal))}</strong></div>
+            <div class="sp-detail"><span>Equipment Subtotal</span><strong>${escapeHtml(quoteCurrency(printedEquipmentSubtotal))}</strong></div>
             <div class="sp-detail"><span>${escapeHtml(savedFreight.label || "Factory Freight")}</span><strong>${escapeHtml(quoteCurrency(savedFreight.total))}</strong></div>
             <div class="sp-detail"><span>Setup / Installation</span><strong>${escapeHtml(quoteCurrency(savedTotals.setupInstallation))}</strong></div>
             <div class="sp-detail"><span>Delivery / Pickup</span><strong>${savedTotals.deliveryIncluded ? "Included" : escapeHtml(quoteCurrency(savedTotals.delivery))}</strong></div>
@@ -5723,8 +6082,9 @@ const internalNotesHtml = internalNotes.map(n => `
         </div>
 
         <footer class="sp-footer">
-          NEW MILFORD &bull; 265 Danbury Rd., New Milford, CT 06776 &bull; (860) 355-8722<br>
-          DANBURY &bull; 56 Beaver Brook Rd., Danbury, CT 06810 &bull; (203) 792-3030
+          NEW MILFORD &bull; 265 Danbury Rd., New Milford, CT 06776 &bull; (860) 355-8722 &bull; sales@westendpower.com<br>
+          DANBURY &bull; 56 Beaver Brook Rd., Danbury, CT 06810 &bull; (203) 792-3030 &bull; dawepe@westendpower.com<br>
+          westendpower.com
         </footer>
         </div>
       </main>
