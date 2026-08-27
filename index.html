@@ -8210,6 +8210,7 @@ function renderOnlineOrderAction(item){
     onlineItemInStock(item);
 
   if(
+    configuratorHasCapability('onlineOrders', true) &&
     inStock &&
     isTrue(item.BuyOnlineEligible)
   ){
@@ -8334,6 +8335,11 @@ function onlineShippingAvailable(item){
 function openOnlineOrderModal(item){
 
   if(!item) return;
+
+  if(!configuratorHasCapability('onlineOrders', true)){
+    alert('Online ordering is not available for this brand.');
+    return;
+  }
 
   const existing =
     document.getElementById(
