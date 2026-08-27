@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-configurator-brand="YANMAR">
 <head>
   <!-- =========================================================
        SECTION START: UNIVERSAL EQUIPMENT CONFIGURATOR HEAD
@@ -1651,11 +1651,21 @@ body.dealer-mode .dealer-only{
 };
 
 const dataProfileApi = window.WestEndConfiguratorBrand;
+
+const ACTIVE_BRAND_ID =
+  dataProfileApi &&
+  typeof dataProfileApi.getActiveBrandId === 'function'
+    ? dataProfileApi.getActiveBrandId(document)
+    : (
+        dataProfileApi?.DEFAULT_BRAND_ID ||
+        'YANMAR'
+      );
+
 const DATA_FILES =
   dataProfileApi &&
   typeof dataProfileApi.getDataFiles === 'function'
     ? dataProfileApi.getDataFiles(
-        dataProfileApi.DEFAULT_BRAND_ID,
+        ACTIVE_BRAND_ID,
         DEFAULT_DATA_FILES
       )
     : DEFAULT_DATA_FILES;
@@ -20995,7 +21005,7 @@ function bindDealerMode(){
     }
 
     const startupBrandId =
-      brandApi.DEFAULT_BRAND_ID;
+      ACTIVE_BRAND_ID;
 
     const startupBrandProfile =
       brandApi.getBrandProfile(startupBrandId);

@@ -4,6 +4,39 @@ const assert = require('node:assert/strict');
 const api = require('./brand-profile.js');
 
 const registeredResult = api.validateRegisteredProfiles();
+const yanmarDocument = {
+  documentElement: {
+    dataset: {
+      configuratorBrand: ' yanmar '
+    }
+  }
+};
+
+const unknownBrandDocument = {
+  documentElement: {
+    dataset: {
+      configuratorBrand: 'future-brand'
+    }
+  }
+};
+
+assert.equal(api.getActiveBrandId(), 'YANMAR');
+assert.equal(
+  api.getActiveBrandId(yanmarDocument),
+  'YANMAR'
+);
+assert.equal(
+  api.getActiveBrandProfile(yanmarDocument)?.id,
+  'YANMAR'
+);
+assert.equal(
+  api.getActiveBrandId(unknownBrandDocument),
+  'FUTURE-BRAND'
+);
+assert.equal(
+  api.getActiveBrandProfile(unknownBrandDocument),
+  null
+);
 
 assert.equal(
   registeredResult.valid,

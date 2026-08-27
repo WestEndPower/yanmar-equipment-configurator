@@ -89,6 +89,32 @@
     return String(value || '').trim().toUpperCase();
   }
 
+    function getActiveBrandId(targetDocument) {
+    const documentRef =
+      targetDocument ||
+      (
+        typeof document === 'object'
+          ? document
+          : null
+      );
+
+    const configuredBrandId =
+      normalizeBrandId(
+        documentRef
+          ?.documentElement
+          ?.dataset
+          ?.configuratorBrand
+      );
+
+    return configuredBrandId ||
+      DEFAULT_BRAND_ID;
+  }
+
+  function getActiveBrandProfile(targetDocument) {
+    return getBrandProfile(
+      getActiveBrandId(targetDocument)
+    );
+  }
     const REQUIRED_DATA_FILES = Object.freeze([
     'products',
     'packages',
@@ -402,6 +428,8 @@
     SCHEMA_VERSION,
     DEFAULT_BRAND_ID,
     profiles,
+    getActiveBrandId,
+    getActiveBrandProfile,
     validateBrandProfile,
     validateRegisteredProfiles,
     getBrandProfile,
