@@ -12667,18 +12667,28 @@ function lineActualFreightCost(line){
 }
 
 function configuratorFreightPolicy(){
+  const fallbackBrandId =
+    clean(ACTIVE_BRAND_ID).toUpperCase() ||
+    'BRAND';
+
   const fallback = {
     packageComponentGroups: [
-      'YANMARATTACHMENT',
-      'YANMARACCESSORY'
+      fallbackBrandId + 'ATTACHMENT',
+      fallbackBrandId + 'ACCESSORY'
     ],
     ruleIdPrefixes: [
-      'YANMAR'
+      fallbackBrandId
     ]
   };
-  const api = window.WestEndConfiguratorBrand;
 
-  if(!api || typeof api.getFreightPolicy !== 'function'){
+  const api =
+    window.WestEndConfiguratorBrand;
+
+  if(
+    !api ||
+    typeof api.getFreightPolicy !==
+      'function'
+  ){
     return fallback;
   }
 
