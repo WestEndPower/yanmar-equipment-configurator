@@ -59,6 +59,15 @@
         freightRules: 'data/freight-rules.csv'
       })
     }),
+    freight: Object.freeze({
+      packageComponentGroups: Object.freeze([
+        'YANMARATTACHMENT',
+        'YANMARACCESSORY'
+      ]),
+      ruleIdPrefixes: Object.freeze([
+        'YANMAR'
+      ])
+    }),
     capabilities: Object.freeze({
       publicConfigurator: true,
       dealerMode: true,
