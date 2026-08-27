@@ -1,8 +1,8 @@
-﻿/*
+/*
  * West End Power universal configurator brand profile.
  *
- * Phase 1 is intentionally non-invasive: index.html does not load this file yet.
- * The current Yanmar configurator remains the visual and functional baseline.
+ * The current Yanmar configurator is the visual and functional baseline.
+ * Brand profiles extend that baseline without changing its default behavior.
  */
 (function attachBrandProfile(root, factory) {
   const api = factory();
@@ -25,6 +25,18 @@
     name: 'Yanmar',
     role: 'baseline',
     appearance: Object.freeze({
+      baseline: 'yanmar',
+      colors: Object.freeze({
+        accent: '#cc0000',
+        dark: '#111111',
+        surface: '#f5f5f5',
+        border: '#dddddd',
+        success: '#1f7a3a',
+        danger: '#b00020'
+      }),
+      layout: Object.freeze({
+        maxWidth: '1180px'
+      }),
       preserveCurrentLayout: true,
       preserveCurrentQuoteLayout: true,
       preserveCurrentDealerControls: true
