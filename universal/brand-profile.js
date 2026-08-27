@@ -89,6 +89,204 @@
     return String(value || '').trim().toUpperCase();
   }
 
+    const REQUIRED_DATA_FILES = Object.freeze([
+    'products',
+    'packages',
+    'compatibility'
+  ]);
+
+  const REQUIRED_CAPABILITIES = Object.freeze([
+    'publicConfigurator',
+    'dealerMode',
+    'quotes',
+    'salesOrders',
+    'onlineOrders',
+    'financing',
+    'freightRules',
+    'promotions',
+    'inventory'
+  ]);
+
+  function validateBrandProfile(profile) {
+    const errors = [];
+
+    function requireObject(value, path) {
+      if(!value || typeof value !== 'object' || Array.isArray(value)){
+        errors.push(path + ' must be an object.');
+        return false;
+      }
+
+      return true;
+    }
+
+    function requireString(value, path) {
+      if(typeof value !== 'string' || !value.trim()){
+        errors.push(path + ' must be a non-empty string.');
+        return false;
+      }
+
+      return true;
+    }
+
+    function requireStringArray(value, path) {
+      if(!Array.isArray(value)){
+        errors.push(path + ' must be an array.');
+        return;
+      }
+
+      if(!value.length){
+        errors.push(path + ' must contain at least one value.');
+      }
+
+      value.forEach((item, index) => {
+        requireString(item, path + '[' + index + ']');
+      });
+    }
+
+    if(!requireObject(profile, 'profile')){
+      return Object.freeze({
+        valid: false,
+        errors: Object.freeze(errors)
+      });
+    }
+
+    if(profile.schemaVersion !== SCHEMA_VERSION){
+      errors.push(
+        'profile.schemaVersion must equal ' + SCHEMA_VERSION + '.'
+      );
+    }
+
+    if(requireString(profile.id, 'profile.id')){
+      const normalizedId = normalizeBrandId(profile.id);
+
+      if(profile.id !== normalizedId){
+        errors.push('profile.id must be uppercase and trimmed.');
+      }
+    }
+
+    requireString(profile.name, 'profile.name');
+    requireString(profile.role, 'profile.role');
+
+    if(requireObject(profile.appearance, 'profile.appearance')){
+      requireString(
+        profile.appearance.baseline,
+        'profile.appearance.baseline'
+      );
+
+      if(requireObject(
+        profile.appearance.colors,
+        'profile.appearance.colors'
+      )){
+        [
+          'accent',
+          'dark',
+          'surface',
+          'border',
+          'success',
+          'danger'
+        ].forEach((key) => {
+          requireString(
+            profile.appearance.colors[key],
+            'profile.appearance.colors.' + key
+          );
+        });
+      }
+
+      if(requireObject(
+        profile.appearance.layout,
+        'profile.appearance.layout'
+      )){
+        requireString(
+          profile.appearance.layout.maxWidth,
+          'profile.appearance.layout.maxWidth'
+        );
+      }
+    }
+
+    if(requireObject(profile.data, 'profile.data') &&
+      requireObject(profile.data.files, 'profile.data.files')){
+      REQUIRED_DATA_FILES.forEach((key) => {
+        requireString(
+          profile.data.files[key],
+          'profile.data.files.' + key
+        );
+      });
+
+      if(profile.capabilities?.financing === true){
+        requireString(
+          profile.data.files.financePrograms,
+          'profile.data.files.financePrograms'
+        );
+      }
+
+      if(profile.capabilities?.freightRules === true){
+        requireString(
+          profile.data.files.freightRules,
+          'profile.data.files.freightRules'
+        );
+      }
+
+      if(profile.capabilities?.promotions === true){
+        requireString(
+          profile.data.files.promotions,
+          'profile.data.files.promotions'
+        );
+      }
+    }
+
+    if(requireObject(profile.freight, 'profile.freight')){
+      requireStringArray(
+        profile.freight.packageComponentGroups,
+        'profile.freight.packageComponentGroups'
+      );
+      requireStringArray(
+        profile.freight.ruleIdPrefixes,
+        'profile.freight.ruleIdPrefixes'
+      );
+    }
+
+    if(requireObject(profile.capabilities, 'profile.capabilities')){
+      REQUIRED_CAPABILITIES.forEach((key) => {
+        if(typeof profile.capabilities[key] !== 'boolean'){
+          errors.push(
+            'profile.capabilities.' + key + ' must be boolean.'
+          );
+        }
+      });
+    }
+
+    return Object.freeze({
+      valid: errors.length === 0,
+      errors: Object.freeze(errors)
+    });
+  }
+
+  function validateRegisteredProfiles() {
+    const results = {};
+    const errors = [];
+
+    Object.entries(profiles).forEach(([key, profile]) => {
+      const result = validateBrandProfile(profile);
+      results[key] = result;
+
+      if(profile?.id !== key){
+        errors.push(
+          key + ': profile.id must match its registry key.'
+        );
+      }
+
+      result.errors.forEach((message) => {
+        errors.push(key + ': ' + message);
+      });
+    });
+
+    return Object.freeze({
+      valid: errors.length === 0,
+      errors: Object.freeze(errors),
+      profiles: Object.freeze(results)
+    });
+  }
+
   function getBrandProfile(brandId) {
     const key = normalizeBrandId(brandId);
     return profiles[key] || null;
@@ -204,6 +402,8 @@
     SCHEMA_VERSION,
     DEFAULT_BRAND_ID,
     profiles,
+    validateBrandProfile,
+    validateRegisteredProfiles,
     getBrandProfile,
     requireBrandProfile,
     hasCapability,
