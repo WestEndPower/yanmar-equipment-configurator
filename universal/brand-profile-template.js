@@ -1,6 +1,47 @@
-'use strict';
+(function attachBrandProfileTemplate(
+  root,
+  factory
+) {
+  const brandApi =
+    root?.WestEndConfiguratorBrand ||
+    (
+      typeof module === 'object' &&
+      module.exports
+        ? require('./brand-profile.js')
+        : null
+    );
 
-const brandApi = require('./brand-profile.js');
+  const api = factory(brandApi);
+
+  if(
+    typeof module === 'object' &&
+    module.exports
+  ){
+    module.exports = api;
+  }
+
+  if(root){
+    root.WestEndConfiguratorBrandTemplate =
+      api;
+  }
+})(
+  typeof globalThis !== 'undefined'
+    ? globalThis
+    : this,
+  function createBrandProfileTemplateApi(
+    brandApi
+  ) {
+    'use strict';
+
+    if(
+      !brandApi ||
+      typeof brandApi.validateBrandProfile !==
+        'function'
+    ){
+      throw new Error(
+        'Brand-profile API is required.'
+      );
+    }
 
 const STANDARD_DATA_FILES = Object.freeze({
   products: 'products.csv',
@@ -152,9 +193,11 @@ function createBrandProfileTemplate(options) {
   return deepFreeze(profile);
 }
 
-module.exports = Object.freeze({
-  STANDARD_DATA_FILES,
-  DEFAULT_COLORS,
-  DEFAULT_CAPABILITIES,
-  createBrandProfileTemplate
-});
+return Object.freeze({
+      STANDARD_DATA_FILES,
+      DEFAULT_COLORS,
+      DEFAULT_CAPABILITIES,
+      createBrandProfileTemplate
+    });
+  }
+);
