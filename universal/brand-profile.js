@@ -18,6 +18,7 @@
   'use strict';
 
   const SCHEMA_VERSION = 1;
+  const DEFAULT_BRAND_ID = 'YANMAR';
 
   const YANMAR_BASELINE = Object.freeze({
     schemaVersion: SCHEMA_VERSION,
@@ -150,12 +151,27 @@
     return profile.appearance;
   }
 
+  function getDataFiles(brandId, fallbackFiles) {
+    const profile = getBrandProfile(brandId || DEFAULT_BRAND_ID);
+    const fallback = fallbackFiles && typeof fallbackFiles === 'object'
+      ? fallbackFiles
+      : {};
+    const configuredFiles = profile?.data?.files || {};
+
+    return Object.freeze({
+      ...fallback,
+      ...configuredFiles
+    });
+  }
+
   return Object.freeze({
     SCHEMA_VERSION,
+    DEFAULT_BRAND_ID,
     profiles,
     getBrandProfile,
     requireBrandProfile,
     hasCapability,
-    applyAppearance
+    applyAppearance,
+    getDataFiles
   });
 });

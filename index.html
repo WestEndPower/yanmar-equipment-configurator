@@ -1633,7 +1633,8 @@ body.dealer-mode .dealer-only{
 
     const ESTIMATED_ELECTRIC_RATE = 0.35; // $/kWh
 
-    const DATA_FILES = {
+    const DEFAULT_DATA_FILES = {
+
   products: 'data/products.csv',
   packages: 'data/packages.csv',
   compatibility: 'data/compatibility-runtime.csv',
@@ -1648,6 +1649,16 @@ body.dealer-mode .dealer-only{
   bidFleet: 'data/bid-fleet-programs.csv',
   freightRules: 'data/freight-rules.csv'
 };
+
+const dataProfileApi = window.WestEndConfiguratorBrand;
+const DATA_FILES =
+  dataProfileApi &&
+  typeof dataProfileApi.getDataFiles === 'function'
+    ? dataProfileApi.getDataFiles(
+        dataProfileApi.DEFAULT_BRAND_ID,
+        DEFAULT_DATA_FILES
+      )
+    : DEFAULT_DATA_FILES;
 
     /* Private services use the runtime BrandID from products.csv. */
     const CONFIGURATOR_API =
