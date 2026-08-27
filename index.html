@@ -20981,6 +20981,39 @@ function bindDealerMode(){
 
   try{
 
+        const brandApi =
+      window.WestEndConfiguratorBrand;
+
+    if(
+      !brandApi ||
+      typeof brandApi.getBrandProfile !== 'function' ||
+      typeof brandApi.validateBrandProfile !== 'function'
+    ){
+      throw new Error(
+        'Universal brand-profile service is unavailable.'
+      );
+    }
+
+    const startupBrandId =
+      brandApi.DEFAULT_BRAND_ID;
+
+    const startupBrandProfile =
+      brandApi.getBrandProfile(startupBrandId);
+
+    const startupValidation =
+      brandApi.validateBrandProfile(
+        startupBrandProfile
+      );
+
+    if(!startupValidation.valid){
+      throw new Error(
+        'Invalid brand profile for ' +
+        startupBrandId +
+        ': ' +
+        startupValidation.errors.join(' ')
+      );
+    }
+
     await init();
 
     bindDealerMode();
