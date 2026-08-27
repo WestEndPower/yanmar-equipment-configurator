@@ -93,4 +93,83 @@ assert.ok(
   )
 );
 
+const templateApi =
+  require('./brand-profile-template.js');
+
+const temporaryProfile =
+  templateApi.createBrandProfileTemplate({
+    id: 'testbrand',
+    name: 'Test Brand',
+    dataRoot: 'brands/testbrand/data'
+  });
+
+const registeredTemporaryProfile =
+  api.registerBrandProfile(
+    temporaryProfile
+  );
+
+assert.equal(
+  registeredTemporaryProfile.id,
+  'TESTBRAND'
+);
+assert.equal(
+  api.getBrandProfile('testbrand')?.name,
+  'Test Brand'
+);
+assert.equal(
+  api.getActiveBrandProfile({
+    documentElement: {
+      dataset: {
+        configuratorBrand: 'testbrand'
+      }
+    }
+  })?.id,
+  'TESTBRAND'
+);
+assert.equal(
+  api.getRegisteredProfiles()
+    .TESTBRAND
+    ?.data
+    ?.files
+    ?.products,
+  'brands/testbrand/data/products.csv'
+);
+assert.equal(
+  api.validateRegisteredProfiles().valid,
+  true
+);
+
+assert.throws(
+  () => api.registerBrandProfile(
+    temporaryProfile
+  ),
+  /already registered/
+);
+
+assert.throws(
+  () => api.registerBrandProfile(
+    api.getBrandProfile('YANMAR'),
+    { replace: true }
+  ),
+  /baseline brand profile cannot be replaced/
+);
+
+assert.equal(
+  api.unregisterBrandProfile('testbrand'),
+  true
+);
+assert.equal(
+  api.getBrandProfile('testbrand'),
+  null
+);
+assert.equal(
+  api.unregisterBrandProfile('testbrand'),
+  false
+);
+
+assert.throws(
+  () => api.unregisterBrandProfile('YANMAR'),
+  /baseline brand profile cannot be removed/
+);
+
 console.log('Brand-profile validator tests passed.');

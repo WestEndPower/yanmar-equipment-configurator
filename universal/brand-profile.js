@@ -81,9 +81,9 @@
     })
   });
 
-  const profiles = Object.freeze({
+  const profileRegistry = {
     YANMAR: YANMAR_BASELINE
-  });
+  };
 
   function normalizeBrandId(value) {
     return String(value || '').trim().toUpperCase();
@@ -132,6 +132,96 @@
     'promotions',
     'inventory'
   ]);
+
+    function cloneAndFreeze(value) {
+    if(Array.isArray(value)){
+      return Object.freeze(
+        value.map(cloneAndFreeze)
+      );
+    }
+
+    if(value && typeof value === 'object'){
+      const clone = {};
+
+      Object.entries(value).forEach(
+        ([key, item]) => {
+          clone[key] = cloneAndFreeze(item);
+        }
+      );
+
+      return Object.freeze(clone);
+    }
+
+    return value;
+  }
+
+  function getRegisteredProfiles() {
+    return Object.freeze({
+      ...profileRegistry
+    });
+  }
+
+  function registerBrandProfile(
+    profile,
+    options
+  ) {
+    const validation =
+      validateBrandProfile(profile);
+
+    if(!validation.valid){
+      throw new Error(
+        'Cannot register invalid brand profile: ' +
+        validation.errors.join(' ')
+      );
+    }
+
+    const id = normalizeBrandId(profile.id);
+    const replaceExisting =
+      options?.replace === true;
+
+    if(
+      profileRegistry[id] &&
+      !replaceExisting
+    ){
+      throw new Error(
+        'Configurator brand is already registered: ' +
+        id
+      );
+    }
+
+    if(
+      id === DEFAULT_BRAND_ID &&
+      replaceExisting
+    ){
+      throw new Error(
+        'The baseline brand profile cannot be replaced.'
+      );
+    }
+
+    const storedProfile =
+      cloneAndFreeze(profile);
+
+    profileRegistry[id] = storedProfile;
+
+    return storedProfile;
+  }
+
+  function unregisterBrandProfile(brandId) {
+    const id = normalizeBrandId(brandId);
+
+    if(id === DEFAULT_BRAND_ID){
+      throw new Error(
+        'The baseline brand profile cannot be removed.'
+      );
+    }
+
+    if(!profileRegistry[id]){
+      return false;
+    }
+
+    delete profileRegistry[id];
+    return true;
+  }
 
   function validateBrandProfile(profile) {
     const errors = [];
@@ -291,7 +381,7 @@
     const results = {};
     const errors = [];
 
-    Object.entries(profiles).forEach(([key, profile]) => {
+    Object.entries(profileRegistry).forEach(([key, profile]) => {
       const result = validateBrandProfile(profile);
       results[key] = result;
 
@@ -315,7 +405,7 @@
 
   function getBrandProfile(brandId) {
     const key = normalizeBrandId(brandId);
-    return profiles[key] || null;
+    return profileRegistry[key] || null;
   }
 
   function requireBrandProfile(brandId) {
@@ -427,7 +517,10 @@
   return Object.freeze({
     SCHEMA_VERSION,
     DEFAULT_BRAND_ID,
-    profiles,
+    profiles: getRegisteredProfiles(),
+    getRegisteredProfiles,
+    registerBrandProfile,
+    unregisterBrandProfile,
     getActiveBrandId,
     getActiveBrandProfile,
     validateBrandProfile,
