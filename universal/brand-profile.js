@@ -173,6 +173,33 @@
     });
   }
 
+  function getFreightPolicy(brandId, fallbackPolicy) {
+    const profile = getBrandProfile(brandId || DEFAULT_BRAND_ID);
+    const fallback = fallbackPolicy && typeof fallbackPolicy === 'object'
+      ? fallbackPolicy
+      : {};
+    const configured = profile?.freight || {};
+
+    const packageComponentGroups =
+      configured.packageComponentGroups ||
+      fallback.packageComponentGroups ||
+      [];
+
+    const ruleIdPrefixes =
+      configured.ruleIdPrefixes ||
+      fallback.ruleIdPrefixes ||
+      [];
+
+    return Object.freeze({
+      packageComponentGroups: Object.freeze([
+        ...packageComponentGroups
+      ]),
+      ruleIdPrefixes: Object.freeze([
+        ...ruleIdPrefixes
+      ])
+    });
+  }
+
   return Object.freeze({
     SCHEMA_VERSION,
     DEFAULT_BRAND_ID,
@@ -181,6 +208,7 @@
     requireBrandProfile,
     hasCapability,
     applyAppearance,
-    getDataFiles
+    getDataFiles,
+    getFreightPolicy
   });
 });

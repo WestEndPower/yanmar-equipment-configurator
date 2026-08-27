@@ -12656,12 +12656,34 @@ function lineActualFreightCost(line){
     : null;
 }
 
+function configuratorFreightPolicy(){
+  const fallback = {
+    packageComponentGroups: [
+      'YANMARATTACHMENT',
+      'YANMARACCESSORY'
+    ],
+    ruleIdPrefixes: [
+      'YANMAR'
+    ]
+  };
+  const api = window.WestEndConfiguratorBrand;
+
+  if(!api || typeof api.getFreightPolicy !== 'function'){
+    return fallback;
+  }
+
+  return api.getFreightPolicy(
+    configuratorBrandId(),
+    fallback
+  );
+}
+
 function isYanmarAttachmentFreightGroup(group){
   const key = freightKey(group);
+  const policy = configuratorFreightPolicy();
 
-  return (
-    key === 'YANMARATTACHMENT' ||
-    key === 'YANMARACCESSORY'
+  return (policy.packageComponentGroups || []).some(
+    candidate => freightKey(candidate) === key
   );
 }
 
@@ -13218,13 +13240,19 @@ function freightSummary(){
       The SKU amount remains the fallback when no active Yanmar rule
       applies to the product's freight group.
     */
+    const freightPolicy = configuratorFreightPolicy();
+    const ruleIdPrefixes = freightPolicy.ruleIdPrefixes || [];
     const yanmarPolicyMatches =
       state.freightRules.filter(rule =>
         (
           clean(rule.Active) === '' ||
           isTrue(rule.Active)
         ) &&
-        freightKey(rule.RuleID).startsWith('YANMAR') &&
+        ruleIdPrefixes.some(prefix =>
+          freightKey(rule.RuleID).startsWith(
+            freightKey(prefix)
+          )
+        ) &&
         freightRuleMatchesGroup(rule, group) &&
         freightQtyMatches(rule, qty) &&
         (
@@ -13263,7 +13291,8 @@ function freightSummary(){
         sku: skuOf(line.item),
         group,
         qty,
-        source: 'Yanmar freight rule',
+        source:
+          `${configuratorBrandName()} freight rule`,
         matchingRules:
           yanmarPolicyMatches.map(rule =>
             clean(rule.RuleID)
