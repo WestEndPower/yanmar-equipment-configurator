@@ -8194,6 +8194,7 @@ function onlineInventoryAvailable(value){
 }
 
 function onlineItemInStock(item){
+  if(!configuratorHasCapability('inventory', true)) return false;
   if(!item) return false;
 
   return (
@@ -12416,6 +12417,8 @@ function freightKey(v){
 }
 
 function lineIsInStock(line){
+  if(!configuratorHasCapability('inventory', true)) return false;
+
   const item = line?.item || {};
 
   const newMilfordQty =
