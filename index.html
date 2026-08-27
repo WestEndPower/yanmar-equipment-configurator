@@ -6052,6 +6052,18 @@ state.freightRules = freightRules
   )
   .sort(sortByOrder);
 
+const brandAppearanceApi = window.WestEndConfiguratorBrand;
+
+if(
+  brandAppearanceApi &&
+  typeof brandAppearanceApi.applyAppearance === 'function'
+){
+  brandAppearanceApi.applyAppearance(
+    configuratorBrandId(),
+    document
+  );
+}
+
 populateBidFleetPrograms();
 populateBidProgramSelect();
 renderCart();

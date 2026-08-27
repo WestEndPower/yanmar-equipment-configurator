@@ -92,11 +92,53 @@
     return profile.capabilities[key] === true;
   }
 
+  function applyAppearance(brandId, targetDocument) {
+    const profile = getBrandProfile(brandId);
+    const documentRef = targetDocument ||
+      (typeof document === 'object' ? document : null);
+    const rootElement = documentRef?.documentElement;
+
+    if(!profile || !rootElement){
+      return null;
+    }
+
+    const colors = profile.appearance?.colors || {};
+    const layout = profile.appearance?.layout || {};
+    const variables = {
+      '--config-accent': colors.accent,
+      '--config-dark': colors.dark,
+      '--config-surface': colors.surface,
+      '--config-border': colors.border,
+      '--config-success': colors.success,
+      '--config-danger': colors.danger,
+      '--config-max-width': layout.maxWidth,
+      '--stihl-orange': colors.accent,
+      '--stihl-dark': colors.dark,
+      '--stihl-gray': colors.surface,
+      '--stihl-border': colors.border,
+      '--stihl-green': colors.success,
+      '--stihl-red': colors.danger,
+      '--max-width': layout.maxWidth
+    };
+
+    Object.entries(variables).forEach(([name, value]) => {
+      const normalizedValue = String(value || '').trim();
+
+      if(normalizedValue){
+        rootElement.style.setProperty(name, normalizedValue);
+      }
+    });
+
+    rootElement.dataset.configuratorBrand = profile.id.toLowerCase();
+    return profile.appearance;
+  }
+
   return Object.freeze({
     SCHEMA_VERSION,
     profiles,
     getBrandProfile,
     requireBrandProfile,
-    hasCapability
+    hasCapability,
+    applyAppearance
   });
 });
