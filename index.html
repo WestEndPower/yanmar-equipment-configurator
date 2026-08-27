@@ -14330,10 +14330,19 @@ function createSalesOrderNumber(){
 }
 
 function ensureSalesOrderNumber(){
-  const status = clean($('stihl-sale-status')?.value);
+  const statusSelect = $('stihl-sale-status');
   const display = $('stihl-sales-order-number-display');
 
   if(!display) return '';
+
+  if(!configuratorHasCapability('salesOrders', true)){
+    if(statusSelect) statusSelect.value = 'quote';
+    display.textContent = 'Not Created';
+    display.dataset.orderNumber = '';
+    return '';
+  }
+
+  const status = clean(statusSelect?.value);
 
   if(status === 'quote'){
     display.textContent = 'Not Created';
@@ -14355,7 +14364,10 @@ function saleRecord(totalOverride){
     0
   );
 
-  const status = clean($('stihl-sale-status')?.value) || 'quote';
+  const salesOrdersEnabled = configuratorHasCapability('salesOrders', true);
+  const status = salesOrdersEnabled
+    ? clean($('stihl-sale-status')?.value) || 'quote'
+    : 'quote';
   const amountInput = $('stihl-sale-amount-received');
 
   let amountReceived =
@@ -14402,6 +14414,12 @@ function saleRecord(totalOverride){
 }
 
 function renderSaleRecordSummary(total){
+  const salesOrdersEnabled = configuratorHasCapability('salesOrders', true);
+  const saleRecordCard = $('stihl-sale-record-card');
+
+  if(saleRecordCard){
+    saleRecordCard.style.display = salesOrdersEnabled ? '' : 'none';
+  }
   const record = saleRecord(total);
 
   if(
@@ -17725,6 +17743,7 @@ function paymentCents(value){
 }
 
 function recordedSalePaymentAmount(totalBeforeSavings){
+  if(!configuratorHasCapability('salesOrders', true)) return 0;
 
   const total = paymentCents(
     Math.max(Number(totalBeforeSavings) || 0, 0)
