@@ -7234,7 +7234,7 @@ return {
           actualFreightCost:
             lineActualFreightCost(line),
           customerFreightCharge:
-            automaticYanmarPackageFreight(line),
+            automaticBrandPackageFreight(line),
           item: line.item,
           originalLineTotal,
           lineDiscount:
@@ -12678,7 +12678,7 @@ function configuratorFreightPolicy(){
   );
 }
 
-function isYanmarAttachmentFreightGroup(group){
+function isBrandPackageFreightGroup(group){
   const key = freightKey(group);
   const policy = configuratorFreightPolicy();
 
@@ -12691,7 +12691,7 @@ function isTarterFreightGroup(group){
   return freightKey(group) === 'TARTERATTACHMENT';
 }
 
-function yanmarIncludedPackageFreightRate(line){
+function brandIncludedPackageFreightRate(line){
   const group =
     freightKey(
       freightGroupOf(line)
@@ -12727,7 +12727,7 @@ function yanmarIncludedPackageFreightRate(line){
     : enteredPercent / 100;
 }
 
-function yanmarPackageLineFreightAmount(line){
+function brandPackageLineFreightAmount(line){
   if(!line || !line.item){
     return 0;
   }
@@ -12756,7 +12756,7 @@ function yanmarPackageLineFreightAmount(line){
   }
 
   const includedRate =
-    yanmarIncludedPackageFreightRate(
+    brandIncludedPackageFreightRate(
       line
     );
 
@@ -12809,7 +12809,7 @@ function yanmarPackageLineFreightAmount(line){
     : 0;
 }
 
-function automaticYanmarPackageFreight(parentLine){
+function automaticBrandPackageFreight(parentLine){
   if(
     !parentLine ||
     !parentLine.item ||
@@ -12827,7 +12827,7 @@ function automaticYanmarPackageFreight(parentLine){
     lineActualFreightCost(parentLine);
 
   if(parentActualFreight !== null){
-    return isYanmarAttachmentFreightGroup(
+    return isBrandPackageFreightGroup(
       freightGroupOf(parentLine)
     )
       ? roundCustomerFreight(
@@ -12854,7 +12854,7 @@ function automaticYanmarPackageFreight(parentLine){
 
   const freightLines =
     packageLines.filter(packageLine =>
-      isYanmarAttachmentFreightGroup(
+      isBrandPackageFreightGroup(
         freightGroupOf(packageLine)
       )
     );
@@ -12868,7 +12868,7 @@ function automaticYanmarPackageFreight(parentLine){
 
       const amount =
         actualFreight === null
-          ? yanmarPackageLineFreightAmount(
+          ? brandPackageLineFreightAmount(
               packageLine
             )
           : actualFreight;
@@ -12907,11 +12907,11 @@ function freightSummary(){
   const appliedPerOrderRules = new Set();
 
     /*
-    Calculate Yanmar attachment/accessory freight
+    Calculate brand package-component freight
     separately for each visible product or package.
     Required components follow their visible parent.
   */
-  const yanmarPackages =
+  const brandPackages =
     state.cart
       .filter(parentLine =>
         parentLine &&
@@ -12938,7 +12938,7 @@ function freightSummary(){
 
         const freightLines =
           packageLines.filter(packageLine =>
-            isYanmarAttachmentFreightGroup(
+            isBrandPackageFreightGroup(
               freightGroupOf(packageLine)
             )
           );
@@ -12954,7 +12954,7 @@ function freightSummary(){
           lineActualFreightCost(
             packageInfo.parentLine
           ) === null ||
-          isYanmarAttachmentFreightGroup(
+          isBrandPackageFreightGroup(
             freightGroupOf(
               packageInfo.parentLine
             )
@@ -12962,7 +12962,7 @@ function freightSummary(){
         )
       );
 
-  yanmarPackages.forEach(packageInfo => {
+  brandPackages.forEach(packageInfo => {
     const parentLine =
       packageInfo.parentLine;
 
@@ -12992,7 +12992,7 @@ function freightSummary(){
 
           const amount =
             actualFreight === null
-              ? yanmarPackageLineFreightAmount(
+              ? brandPackageLineFreightAmount(
                   freightLine
                 )
               : actualFreight;
@@ -13041,7 +13041,7 @@ function freightSummary(){
 
     debug.push({
       type:
-        'yanmar-package-freight',
+        'brand-package-freight',
       parentSku:
         skuOf(parentLine.item),
       dealerCost,
@@ -13173,7 +13173,7 @@ function freightSummary(){
 
   /*
     Preserve all existing fixed tractor, UTV, ZTR
-    and power-equipment freight rules. Yanmar
+    and power-equipment freight rules. Brand package-component
     attachment/accessory and Tarter rules are handled
     above and are excluded from this generic section.
   */
@@ -13190,7 +13190,7 @@ function freightSummary(){
       freightGroupOf(line);
 
     if(
-      isYanmarAttachmentFreightGroup(group) ||
+      isBrandPackageFreightGroup(group) ||
       isTarterFreightGroup(group)
     ){
       return;
@@ -13235,14 +13235,14 @@ function freightSummary(){
     }
 
     /*
-      A configured Yanmar freight rule is the current policy and must
+      A configured brand freight rule is the current policy and must
       override any older freight amount exported on the product SKU.
-      The SKU amount remains the fallback when no active Yanmar rule
+      The SKU amount remains the fallback when no active brand rule
       applies to the product's freight group.
     */
     const freightPolicy = configuratorFreightPolicy();
     const ruleIdPrefixes = freightPolicy.ruleIdPrefixes || [];
-    const yanmarPolicyMatches =
+    const brandPolicyMatches =
       state.freightRules.filter(rule =>
         (
           clean(rule.Active) === '' ||
@@ -13261,8 +13261,8 @@ function freightSummary(){
         )
       );
 
-    if(yanmarPolicyMatches.length > 0){
-      yanmarPolicyMatches.forEach(rule => {
+    if(brandPolicyMatches.length > 0){
+      brandPolicyMatches.forEach(rule => {
         const amount =
           freightAmountForRule(
             rule,
@@ -13294,7 +13294,7 @@ function freightSummary(){
         source:
           `${configuratorBrandName()} freight rule`,
         matchingRules:
-          yanmarPolicyMatches.map(rule =>
+          brandPolicyMatches.map(rule =>
             clean(rule.RuleID)
           )
       });
@@ -18528,8 +18528,8 @@ const tarterOrderDealerCost =
       0
     );
 
-const yanmarPackageFreight =
-  automaticYanmarPackageFreight(
+const brandPackageFreight =
+  automaticBrandPackageFreight(
     line
   );
 
@@ -18545,7 +18545,7 @@ const packageActualFreightCharge =
 
 const packageConfiguredFreightCharge = (() => {
   if(
-    isYanmarAttachmentFreightGroup(
+    isBrandPackageFreightGroup(
       freightGroupOf(line)
     )
   ){
@@ -18612,11 +18612,11 @@ const packageFreightNotice =
         : 'Factory Freight Must Be Confirmed'
     : (
         packageConfiguredFreightCharge +
-        yanmarPackageFreight
+        brandPackageFreight
       ) > 0
       ? `A ${fmtMoney(
           packageConfiguredFreightCharge +
-          yanmarPackageFreight
+          brandPackageFreight
         )} Factory Freight Charge Applies`
       : '';
 
