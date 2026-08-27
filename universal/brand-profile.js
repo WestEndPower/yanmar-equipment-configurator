@@ -41,6 +41,23 @@
       preserveCurrentQuoteLayout: true,
       preserveCurrentDealerControls: true
     }),
+    data: Object.freeze({
+      files: Object.freeze({
+        products: 'data/products.csv',
+        packages: 'data/packages.csv',
+        compatibility: 'data/compatibility-runtime.csv',
+        batteries: 'data/batteries.csv',
+        chargers: 'data/chargers.csv',
+        attachments: 'data/attachments.csv',
+        accessories: 'data/accessories.csv',
+        parts: 'data/parts.csv',
+        promotions: 'data/promotions.csv',
+        delivery: 'data/delivery-zones.csv',
+        financePrograms: 'data/finance-programs.csv',
+        bidFleet: 'data/bid-fleet-programs.csv',
+        freightRules: 'data/freight-rules.csv'
+      })
+    }),
     capabilities: Object.freeze({
       publicConfigurator: true,
       dealerMode: true,
