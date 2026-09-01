@@ -331,6 +331,25 @@ td{
           id="quote-sync-dashboard">
           Update Dashboard
         </button>
+
+        <a
+          class="quote-btn secondary"
+          href="https://westendpower-configurator-api.westendpower-nm.workers.dev/dashboard"
+          target="_blank"
+          rel="noopener noreferrer"
+          style="display:inline-flex;text-decoration:none;">
+          Dashboard
+        </a>
+
+        <a
+          class="quote-btn secondary"
+          id="quote-view-dashboard"
+          href="#"
+          target="_blank"
+          rel="noopener noreferrer"
+          style="display:none;text-decoration:none;">
+          View in Dashboard
+        </a>
       </div>
       <div
         id="quote-sync-dashboard-message"
@@ -674,14 +693,10 @@ td{
     </div>
 
     <div class="dealer-field" id="payment-card-type-wrap" style="display:none;">
-      <label for="payment-card-type">Card Type</label>
+      <label for="payment-card-type">Card Processor</label>
       <select id="payment-card-type">
-        <option value="">Select Card Type</option>
-        <option value="Visa">Visa</option>
-        <option value="Mastercard">Mastercard</option>
-        <option value="Discover">Discover</option>
-        <option value="American Express">American Express</option>
-        <option value="Other">Other</option>
+        <option value="">Select Card Processor</option>
+        <option value="Stripe">Stripe</option>
       </select>
     </div>
 
@@ -1484,6 +1499,12 @@ const documentState = {
     clean(storedDocument.orderNumber) ||
     clean(savedSale.orderNumber),
 
+  dashboardUrl:
+    clean(storedDocument.dashboardUrl),
+
+  dashboardQuoteId:
+    Number(storedDocument.dashboardQuoteId) || 0,
+
   baseTotal:
     money(storedDocument.baseTotal) ||
     actualOutTheDoor,
@@ -1777,10 +1798,31 @@ async function syncDealerQuoteState(){
                   name:
                     itemName(line.item),
 
+                  originalLineTotal:
+                    money(
+                      line.originalLineTotal
+                    ),
+
+                  totalDiscount:
+                    money(
+                      line.totalDiscount
+                    ),
+
                   lineTotal:
                     money(
                       line.finalLineTotal
                     )
+                })),
+
+              lines:
+                visibleLines.map(line => ({
+                  qty: Number(line.qty) || 1,
+                  sku: itemSku(line.item),
+                  name: itemName(line.item),
+                  originalLineTotal: money(line.originalLineTotal),
+                  totalDiscount: money(line.totalDiscount),
+                  finalLineTotal: money(line.finalLineTotal),
+                  item: line.item
                 })),
 
               notes:
@@ -1816,6 +1858,18 @@ async function syncDealerQuoteState(){
         result.error ||
         "Database update failed."
       );
+    }
+
+    if(result.dashboardUrl){
+      documentState.dashboardUrl =
+        new URL(
+          result.dashboardUrl,
+          CONFIGURATOR_API
+        ).href;
+      documentState.dashboardQuoteId =
+        Number(result.quoteId) || 0;
+      saveDocumentState();
+      renderDocumentState();
     }
 
     return true;
@@ -2737,6 +2791,20 @@ function renderDocumentState(){
     !!documentState.orderNumber &&
     balance <= 0.009;
 
+  const dashboardLink =
+    document.getElementById('quote-view-dashboard');
+
+  if(dashboardLink){
+    dashboardLink.style.display =
+      documentState.dashboardUrl ? 'inline-flex' : 'none';
+    dashboardLink.href =
+      documentState.dashboardUrl || '#';
+    dashboardLink.textContent =
+      paidInFull
+        ? 'View Sold Order'
+        : 'View in Dashboard';
+  }
+
   [
     'payment-date',
     'payment-amount',
@@ -2858,10 +2926,10 @@ if(!receivedBy){
   }
 
   if(
-    ['credit-card','debit-card'].includes(methodKey) &&
+    methodKey === 'credit-card' &&
     !cardType
   ){
-    message.textContent = 'Select the card type.';
+    message.textContent = 'Select Stripe as the card processor.';
     message.style.color = '#b00020';
     return;
   }
@@ -2874,7 +2942,10 @@ if(!receivedBy){
     amount,
     methodKey,
     method: paymentMethodLabel({methodKey}),
-    cardType,
+    cardType:
+      methodKey === 'credit-card'
+        ? cardType
+        : '',
     reference: clean(
       document.getElementById('payment-reference').value
     ),
@@ -3014,9 +3085,15 @@ if(dealerQuoteMode){
     document.getElementById(
       'payment-card-type-wrap'
     ).style.display =
-      ['credit-card','debit-card'].includes(event.target.value)
+      event.target.value === 'credit-card'
         ? 'block'
         : 'none';
+
+    if(event.target.value !== 'credit-card'){
+      document.getElementById(
+        'payment-card-type'
+      ).value = '';
+    }
   });
 
   document.getElementById('payment-date').value =

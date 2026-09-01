@@ -10248,6 +10248,17 @@ return isDealer ? `
     <td colspan="6"></td>
   </tr>
 ` : ''}
+  ${manufacturerCostDiscountAmount() > 0 ? `
+  <tr>
+    <td></td>
+    <td colspan="2"
+        style="text-align:left;padding-top:2px;color:#1f7a3a;font-weight:700;">
+      Manufacturer Order Discount:
+      +${fmtMoney(manufacturerCostDiscountAmount())}
+    </td>
+    <td colspan="6"></td>
+  </tr>
+` : ''}
 ` : `
   <tr>
     <td>${qty}</td>
@@ -10604,13 +10615,13 @@ ${isDealer ? dealerKitBreakdownPrintHtml() : ''}
       <span>Trade-In Allowance</span>
       <strong>-${fmtMoney(tradeAllowance())}</strong>
     </div>
+  ` : ''}
 
-    ${manufacturerCostDiscountAmount() > 0 ? `
-      <div style="display:flex;justify-content:space-between;">
-        <span>Manufacturer Cost Discount</span>
-        <strong>+${fmtMoney(manufacturerCostDiscountAmount())}</strong>
-      </div>
-    ` : ''}
+  ${manufacturerCostDiscountAmount() > 0 ? `
+    <div style="display:flex;justify-content:space-between;gap:15px;padding:2px 4px;">
+      <span>Manufacturer Order Discount</span>
+      <strong>+${fmtMoney(manufacturerCostDiscountAmount())}</strong>
+    </div>
   ` : ''}
 
   <div style="
@@ -14260,8 +14271,8 @@ function minimumDownForProgram(program, total){
     lenderDown =
       Math.min(
         Math.ceil(
-          total * (percent / 100)
-        ),
+          total * (percent / 100) / 10
+        ) * 10,
         total
       );
   }
@@ -14313,8 +14324,8 @@ function minimumDownRequirementLabel(program){
     lenderDown =
       Math.min(
         Math.ceil(
-          total * (percent / 100)
-        ),
+          total * (percent / 100) / 10
+        ) * 10,
         total
       );
   }
@@ -15121,6 +15132,34 @@ function addIncludedPackageComponents(tool, parentQty){
       true,
       skuOf(tool)
     );
+
+    /*
+      Factory tractor-loader-backhoe packages may list the bucket in the
+      package row while the matching backhoe is inferred from that bucket.
+      Keep the customer-facing component order logical: loader, backhoe,
+      then backhoe bucket.
+    */
+    const wantedParent = tightSku(skuOf(tool));
+    const inferredSku = tightSku(skuOf(inferredBackhoe.item));
+    const inferredIndex = state.cart.findIndex(line =>
+      line.included &&
+      tightSku(line.parentSku) === wantedParent &&
+      tightSku(skuOf(line.item)) === inferredSku
+    );
+    const bucketIndex = state.cart.findIndex(line =>
+      line.included &&
+      tightSku(line.parentSku) === wantedParent &&
+      /BUCKET/i.test(tightSku(skuOf(line.item)))
+    );
+
+    if(
+      inferredIndex >= 0 &&
+      bucketIndex >= 0 &&
+      inferredIndex > bucketIndex
+    ){
+      const [backhoeLine] = state.cart.splice(inferredIndex, 1);
+      state.cart.splice(bucketIndex, 0, backhoeLine);
+    }
   }
 }
 
@@ -19670,6 +19709,29 @@ if($('stihl-salesman-spiff-display')){
 }
 
 const bidFleetLine = document.createElement('div');
+
+const manufacturerDiscountLine =
+  $('stihl-manufacturer-discount-line');
+
+if(manufacturerDiscountLine){
+  const activeManufacturerRebate =
+    customerRebateAmount();
+
+  manufacturerDiscountLine.style.display =
+    activeManufacturerRebate > 0 ? '' : 'none';
+
+  manufacturerDiscountLine.style.fontWeight = '900';
+
+  manufacturerDiscountLine.innerHTML =
+    activeManufacturerRebate > 0
+      ? `
+        <div class="stihl-line">
+          <span>${escapeHtml(configuratorBrandName())} Manufacturer Rebate</span>
+          <strong style="color:#c00000;">-${fmtMoney(activeManufacturerRebate)}</strong>
+        </div>
+      `
+      : '';
+}
 
 const discountLine = $('stihl-discount-line');
 
