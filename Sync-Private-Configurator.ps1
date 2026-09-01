@@ -2,7 +2,8 @@
 param(
     [string]$BrandId = "",
     [string]$ApiUrl = "https://westendpower-configurator-api.westendpower-nm.workers.dev",
-     [string]$ProductsFile = ""
+    [string]$ProductsFile = "",
+    [string]$InventoryWorkbook = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -42,6 +43,91 @@ if (-not (Test-Path -LiteralPath $privateFolder)) {
     throw "Private configurator folder not found: $privateFolder"
 }
 
+if (-not [string]::IsNullOrWhiteSpace($InventoryWorkbook)) {
+    if (-not (Test-Path -LiteralPath $InventoryWorkbook)) {
+        throw "Inventory workbook not found: $InventoryWorkbook"
+    }
+
+    $inventoryWorkbookPath =
+        (Resolve-Path -LiteralPath $InventoryWorkbook).Path
+
+    $inventoryCsv =
+        Join-Path $privateFolder "inventory.csv"
+
+    $excel = $null
+    $workbook = $null
+    $inventoryBook = $null
+    $inventorySheet = $null
+
+    try {
+        $excel =
+            New-Object -ComObject Excel.Application
+
+        $excel.Visible = $false
+        $excel.DisplayAlerts = $false
+
+        $workbook =
+            $excel.Workbooks.Open(
+                $inventoryWorkbookPath,
+                0,
+                $true
+            )
+
+        $inventorySheet =
+            $workbook.Worksheets.Item("Inventory")
+
+        $excel.CalculateFull()
+
+        $inventorySheet.Copy()
+
+        $inventoryBook =
+            $excel.ActiveWorkbook
+
+        if (Test-Path -LiteralPath $inventoryCsv) {
+            Remove-Item -LiteralPath $inventoryCsv
+        }
+
+        # 62 is the Excel UTF-8 CSV format.
+        $inventoryBook.SaveAs(
+            $inventoryCsv,
+            62
+        )
+
+        Write-Host `
+            "PASS  Inventory worksheet exported privately" `
+            -ForegroundColor Green
+    }
+    finally {
+        if ($inventoryBook) {
+            $inventoryBook.Close($false)
+        }
+
+        if ($workbook) {
+            $workbook.Close($false)
+        }
+
+        if ($excel) {
+            $excel.Quit()
+        }
+
+        foreach ($comObject in @(
+            $inventorySheet,
+            $inventoryBook,
+            $workbook,
+            $excel
+        )) {
+            if ($comObject) {
+                [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject(
+                    $comObject
+                )
+            }
+        }
+
+        [GC]::Collect()
+        [GC]::WaitForPendingFinalizers()
+    }
+}
+
 $datasets = @(
     "products",
     "attachments",
@@ -53,7 +139,8 @@ $datasets = @(
     "finance-programs",
     "bid-fleet-programs",
     "freight-rules",
-    "dealer-rules"
+    "dealer-rules",
+    "inventory"
 )
 
 $admin = Get-Credential `
