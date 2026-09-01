@@ -18553,12 +18553,26 @@ const replacementControls = childItems
               ${tightSku(skuOf(choice)) === tightSku(skuOf(child.item)) ? 'selected' : ''}>
               ${escapeHtml(nameOf(choice))}${child.included
                 ? (() => {
+                    const isStandard =
+                      tightSku(skuOf(choice)) === tightSku(skuOf(baseItem));
+
+                    if(isStandard){
+                      return ' — Standard Included';
+                    }
+
                     const difference =
                       (priceOf(choice) - priceOf(baseItem)) *
                       (Number(child.qty) || 1);
-                    if(difference > 0) return ` — Included + ${fmtMoney(difference)}`;
-                    if(difference < 0) return ` — Included - ${fmtMoney(Math.abs(difference))}`;
-                    return ' — Included';
+
+                    if(difference > 0){
+                      return ` — Add ${fmtMoney(difference)}`;
+                    }
+
+                    if(difference < 0){
+                      return ` — Save ${fmtMoney(Math.abs(difference))}`;
+                    }
+
+                    return ' — No Price Change';
                   })()
                 : ` — ${fmtMoney(priceOf(choice))}`}
             </option>
