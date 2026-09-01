@@ -1914,8 +1914,7 @@ function inferredPackageBackhoeRecord(packageRow){
     const itemSKU = tightSku(skuOf(record.item));
     const itemName = clean(nameOf(record.item)).toUpperCase();
 
-    return itemSKU.startsWith(backhoeFamily) &&
-      !itemSKU.includes('BUCKET') &&
+    return !itemSKU.includes('BUCKET') &&
       itemName.includes('BACKHOE');
   });
 
