@@ -2678,31 +2678,42 @@ function renderDocumentState(){
     );
 
   /*
-    Older saved sales orders subtracted recorded deposits from the
-    planned financed amount. Restore any allocation gap to financing
-    when the customer selected a financing program; do not inflate the
-    selected cash/down-payment amount.
+    Preserve a required down payment as Amount Due Today. Do not add it
+    back into Amount Financed before the customer records that payment.
+    Legacy orders without a planned customer contribution may still use
+    the allocation-gap recovery below.
   */
-  if(
-    money(savedPayment.financed) > 0 ||
-    clean(savedPayment.program)
-  ){
-    displayedPlan.finance += addedBalance;
-  }else if(money(remainingPlan.cash) > 0){
-    displayedPlan.cash += addedBalance;
-  }else if(money(remainingPlan.credit) > 0){
-    displayedPlan.credit += addedBalance;
-  }else if(money(remainingPlan.finance) > 0){
-    displayedPlan.finance += addedBalance;
-  }else{
-    const lastPayment =
-      activePayments().slice(-1)[0];
+  const plannedCustomerContribution =
+    Math.max(
+      money(savedPayment.amountDueToday),
+      money(savedPayment.requiredDown)
+    );
 
-    displayedPlan[
-      lastPayment
-        ? paymentClass(lastPayment.methodKey)
-        : 'cash'
-    ] += addedBalance;
+  if(
+    addedBalance > 0 &&
+    plannedCustomerContribution <= 0
+  ){
+    if(
+      money(savedPayment.financed) > 0 ||
+      clean(savedPayment.program)
+    ){
+      displayedPlan.finance += addedBalance;
+    }else if(money(remainingPlan.cash) > 0){
+      displayedPlan.cash += addedBalance;
+    }else if(money(remainingPlan.credit) > 0){
+      displayedPlan.credit += addedBalance;
+    }else if(money(remainingPlan.finance) > 0){
+      displayedPlan.finance += addedBalance;
+    }else{
+      const lastPayment =
+        activePayments().slice(-1)[0];
+
+      displayedPlan[
+        lastPayment
+          ? paymentClass(lastPayment.methodKey)
+          : 'cash'
+      ] += addedBalance;
+    }
   }
 
   document.getElementById(
