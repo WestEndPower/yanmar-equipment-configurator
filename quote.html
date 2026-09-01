@@ -693,9 +693,13 @@ td{
     </div>
 
     <div class="dealer-field" id="payment-card-type-wrap" style="display:none;">
-      <label for="payment-card-type">Card Processor</label>
+      <label for="payment-card-type">Card Type / Processor</label>
       <select id="payment-card-type">
-        <option value="">Select Card Processor</option>
+        <option value="">Select Card Type / Processor</option>
+        <option value="American Express">American Express</option>
+        <option value="Discover">Discover</option>
+        <option value="Mastercard">Master Card</option>
+        <option value="Visa">Visa</option>
         <option value="Stripe">Stripe</option>
       </select>
     </div>
@@ -2929,7 +2933,7 @@ if(!receivedBy){
     methodKey === 'credit-card' &&
     !cardType
   ){
-    message.textContent = 'Select Stripe as the card processor.';
+    message.textContent = 'Select the card type or Stripe.';
     message.style.color = '#b00020';
     return;
   }
