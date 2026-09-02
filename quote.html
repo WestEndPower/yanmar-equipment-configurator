@@ -924,13 +924,23 @@ document.body.classList.toggle(
           const qty =
             Number(line.qty) || 1;
 
-          const unitPrice =
+          const catalogUnitPrice =
   itemUnitPrice(line.item);
 
 const originalLinePrice =
   money(
     line.originalLineTotal
-  ) || unitPrice * qty;
+  ) || catalogUnitPrice * qty;
+
+/*
+  Package components such as backhoe buckets are allocated to their
+  own invoice lines. Use the saved allocated line amount here instead
+  of reading the unallocated catalog MSRP from the parent item again.
+*/
+const unitPrice =
+  qty > 0
+    ? originalLinePrice / qty
+    : originalLinePrice;
 
 const paymentDiscount =
   money(
