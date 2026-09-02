@@ -2958,10 +2958,8 @@ function cartInternalFreightCostTotal(){
         ...state.cart.filter(childLine =>
           childLine &&
           childLine.item &&
-          childLine.requiredItem &&
           !childLine.included &&
-          tightSku(childLine.parentSku) ===
-            parentSKU
+          cartChildBelongsToParent(childLine, parentLine)
         )
       ];
 
@@ -13057,9 +13055,7 @@ function automaticBrandPackageFreight(parentLine){
     ...state.cart.filter(childLine =>
       childLine &&
       childLine.item &&
-      childLine.requiredItem &&
-      tightSku(childLine.parentSku) ===
-        parentSKU
+      cartChildBelongsToParent(childLine, parentLine)
     )
   ];
 
@@ -13141,9 +13137,7 @@ function freightSummary(){
           ...state.cart.filter(childLine =>
             childLine &&
             childLine.item &&
-            childLine.requiredItem &&
-            tightSku(childLine.parentSku) ===
-              parentSKU
+            cartChildBelongsToParent(childLine, parentLine)
           )
         ];
 
@@ -15221,18 +15215,31 @@ function addToolToQuote(){
   const tool = state.tools.find(t => skuOf(t) === sku);
   if(!tool) return;
 
-  const qty = Number($('stihl-tool-qty').value) || 1;
+  const qty = Math.max(1, Number($('stihl-tool-qty').value) || 1);
 
-  addItem('tool', tool, qty, '');
+  /*
+    Add serialized/inventory-priced equipment one physical unit at a time.
+    Any quantity beyond the available inventory becomes a separate current-
+    order line, so inventory and replacement cost are never blended.
+  */
+  for(let unitNumber = 0; unitNumber < qty; unitNumber++){
+    const parentLine = addItem('tool', tool, 1, '');
 
-  addIncludedPackageComponents(tool, qty);
+    if(parentLine){
+      addIncludedPackageComponents(
+        tool,
+        1,
+        parentLine.key
+      );
+    }
+  }
 
   renderDeliveryOptions();
   renderAttachmentOptions();
   renderCart();
 }
 
-function addIncludedPackageComponents(tool, parentQty){
+function addIncludedPackageComponents(tool, parentQty, parentLineKey=''){
 
   const packageRow = tool?.PackageRow;
 
@@ -15284,7 +15291,8 @@ function addIncludedPackageComponents(tool, parentQty){
         true,
         true,
         true,
-        skuOf(tool)
+        skuOf(tool),
+        parentLineKey
       );
     }
   });
@@ -15300,7 +15308,8 @@ function addIncludedPackageComponents(tool, parentQty){
       true,
       true,
       true,
-      skuOf(tool)
+      skuOf(tool),
+      parentLineKey
     );
 
     /*
@@ -15908,6 +15917,12 @@ function trimThirdFunctionsToLoaderCapacity(){
 function updateCartLineQuantity(cartIndex, nextQty){
   const line = state.cart[cartIndex];
   if(!line) return;
+
+  if(inventoryRecordLocksLine(line)){
+    line.qty = 1;
+    renderCart();
+    return;
+  }
 
   const oldQty = Math.max(1, Number(line.qty) || 1);
   const qty = Math.max(1, Number(nextQty) || 1);
@@ -17555,8 +17570,19 @@ function addRequiredItems(parentItem, parentQty){
   requiredNumbers.forEach(addRequirementBranch);
 }
     
-    function addItem(type,item,qty,note,included,skipRequired,requiredItem,parentSku){
+    function addItem(type,item,qty,note,included,skipRequired,requiredItem,parentSku,parentLineKey=''){
   qty = Number(qty) || 1;
+
+  const inventoryRecord =
+    !included && !requiredItem
+      ? preferredInventoryRecordForSku(skuOf(item))
+      : null;
+
+  const inventoryId = clean(inventoryRecord?.InventoryID);
+
+  if(inventoryId){
+    qty = 1;
+  }
 
   if(isThirdFunctionItem(item)){
     const capacity = thirdFunctionCapacityForParent(item, parentSku);
@@ -17577,17 +17603,23 @@ function addRequiredItems(parentItem, parentQty){
   '|' +
   (included ? 'included' : '') +
   '|' +
-  clean(parentSku);
+  clean(parentLineKey || parentSku) +
+  '|' +
+  (inventoryId ? `inventory:${inventoryId}` : 'current-order');
   const existing = state.cart.find(x => x.key === key);
+
+  let addedLine;
 
   if(existing){
     existing.qty += qty;
+
+    addedLine = existing;
 
     if(note && !existing.note){
       existing.note = note;
     }
   }else{
-    state.cart.push({
+    addedLine = {
   key,
   type,
   item,
@@ -17596,20 +17628,24 @@ function addRequiredItems(parentItem, parentQty){
   included: !!included,
   requiredItem: !!requiredItem,
     parentSku: parentSku || '',
+  parentLineKey: parentLineKey || '',
   actualFreightCost: '',
   inventoryId:
-    preferredInventoryRecordForSku(
-      skuOf(item)
-    )?.InventoryID || '',
+    inventoryId,
+  currentOrder:
+    !included && !requiredItem && !inventoryId,
   setupSelected:
     assemblyOptionIsValid(item) &&
     !included
-});
+};
+    state.cart.push(addedLine);
   }
 
   if(!skipRequired){
     addRequiredItems(item, qty);
   }
+
+  return addedLine;
 }
 
 function replaceCartComponent(parentSku, currentSku, nextSku){
@@ -17677,11 +17713,18 @@ function replaceCartComponent(parentSku, currentSku, nextSku){
 
     function removeCart(key){
   const parent = state.cart.find(x => x.key === key);
-  const parentSku = parent ? skuOf(parent.item) : '';
 
   state.cart = state.cart.filter(x =>
     x.key !== key &&
-    x.parentSku !== parentSku
+    !(
+      clean(x.parentLineKey) &&
+      clean(x.parentLineKey) === clean(key)
+    ) &&
+    !(
+      !clean(x.parentLineKey) &&
+      parent &&
+      tightSku(x.parentSku) === tightSku(skuOf(parent.item))
+    )
   );
 
   removeThirdFunctionsMissingLoaders();
@@ -18511,8 +18554,7 @@ if(specialOrderFreightBox){
     .map(({ line, cartIndex }) => {
 
       const childItems = state.cart.filter(c =>
-        c.requiredItem &&
-        c.parentSku === skuOf(line.item)
+        cartChildBelongsToParent(c, line)
       );
 
       const childTotal = childItems.reduce((sum, c) =>
@@ -18620,8 +18662,7 @@ const cartPackageSubtotal =
     }
 
     const cartChildren = state.cart.filter(child =>
-      child.requiredItem &&
-      child.parentSku === skuOf(cartLine.item)
+      cartChildBelongsToParent(child, cartLine)
     );
 
     const cartChildTotal =
@@ -18677,7 +18718,9 @@ const packageDisplayedSavings =
   packageCustomerRebate +
   packageManualDiscount;
 
-const replacementControls = childItems
+const replacementControls = inventoryRecordLocksLine(line)
+  ? ''
+  : childItems
   .map(child => {
     const baseSku = clean(child.replacementBaseSku) || skuOf(child.item);
     const baseBucketMatch = tightSku(baseSku).match(/^BBUCKET\d+-(.+)$/);
@@ -19137,6 +19180,7 @@ ${packageFreightNotice ? `
               <input
                 type="number"
                 min="1"
+                ${inventoryRecordLocksLine(line) ? 'max="1" disabled' : ''}
                 value="${Number(line.qty) || 1}"
                 data-cart-qty="${cartIndex}"
                 style="
@@ -19165,6 +19209,18 @@ ${packageFreightNotice ? `
               ">
               ×
             </button>
+
+            ${inventoryRecordLocksLine(line) ? `
+              <div style="
+                grid-column:1 / -1;
+                color:#8a4b00;
+                font-size:11px;
+                font-weight:900;
+              ">
+                In-stock configured unit — only 1 available at this price.
+                Included equipment cannot be changed.
+              </div>
+            ` : ''}
 
           </div>
 
@@ -21158,7 +21214,8 @@ function inventoryAllocationsForLine(line){
   if(
     !line ||
     !line.item ||
-    line.included
+    line.included ||
+    line.currentOrder
   ){
     return [];
   }
@@ -21274,7 +21331,41 @@ function inventoryTotalsForLine(line){
 
 function preferredInventoryRecordForSku(sku){
 
-  return availableInventoryForSku(sku)[0] || null;
+  const usedInventoryIds = new Set(
+    state.cart
+      .map(line => clean(line?.inventoryId).toUpperCase())
+      .filter(Boolean)
+  );
+
+  return availableInventoryForSku(sku).find(record =>
+    !usedInventoryIds.has(
+      clean(record.InventoryID).toUpperCase()
+    )
+  ) || null;
+}
+
+function inventoryRecordLocksLine(line){
+  if(!line || line.included || line.requiredItem) return false;
+
+  const record = inventoryRecordById(line.inventoryId);
+
+  return !!(
+    record &&
+    (
+      clean(record.SerialNumber) ||
+      clean(record.ItemType).toUpperCase() === 'TOOL'
+    )
+  );
+}
+
+function cartChildBelongsToParent(child, parent){
+  if(!child || !parent || !child.requiredItem) return false;
+
+  if(clean(child.parentLineKey)){
+    return clean(child.parentLineKey) === clean(parent.key);
+  }
+
+  return tightSku(child.parentSku) === tightSku(skuOf(parent.item));
 }
 
 

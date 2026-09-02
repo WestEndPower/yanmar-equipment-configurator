@@ -43,6 +43,40 @@ if (-not (Test-Path -LiteralPath $privateFolder)) {
     throw "Private configurator folder not found: $privateFolder"
 }
 
+# Yanmar inventory lives in the private Inventory worksheet rather than in
+# the public configurator CSV folder.  Older workbook macros call this script
+# without -InventoryWorkbook, so locate the newest Yanmar master beside the
+# sync script automatically.  An explicitly supplied path always wins.
+if (
+    [string]::IsNullOrWhiteSpace($InventoryWorkbook) -and
+    $BrandId -eq "YANMAR"
+) {
+    $inventoryWorkbookCandidate =
+        Get-ChildItem `
+            -LiteralPath $PSScriptRoot `
+            -File `
+            -Filter "YANMAR-Master*.xlsm" `
+            -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+
+    if ($inventoryWorkbookCandidate) {
+        $InventoryWorkbook =
+            $inventoryWorkbookCandidate.FullName
+
+        Write-Host `
+            ("INFO  Inventory workbook: " + $InventoryWorkbook) `
+            -ForegroundColor Cyan
+    }
+    else {
+        throw (
+            "Yanmar inventory workbook was not found beside the sync " +
+            "script. Save YANMAR-Master.xlsm in " + $PSScriptRoot +
+            " or run this script with -InventoryWorkbook."
+        )
+    }
+}
+
 if (-not [string]::IsNullOrWhiteSpace($InventoryWorkbook)) {
     if (-not (Test-Path -LiteralPath $InventoryWorkbook)) {
         throw "Inventory workbook not found: $InventoryWorkbook"
@@ -58,6 +92,10 @@ if (-not [string]::IsNullOrWhiteSpace($InventoryWorkbook)) {
     $workbook = $null
     $inventoryBook = $null
     $inventorySheet = $null
+    $inventoryTable = $null
+    $inventorySourceRange = $null
+    $inventoryTargetSheet = $null
+    $inventoryTargetRange = $null
 
     try {
         $excel =
@@ -76,13 +114,35 @@ if (-not [string]::IsNullOrWhiteSpace($InventoryWorkbook)) {
                 $true
             )
 
+        $excel.CalculateFull()
+
         $inventorySheet =
             $workbook.Worksheets.Item("Inventory")
 
-        $inventorySheet.Copy()
+        $inventoryTable =
+            $inventorySheet.ListObjects.Item("InventoryTable")
 
         $inventoryBook =
-            $excel.ActiveWorkbook
+            $excel.Workbooks.Add()
+
+        $inventoryTargetSheet =
+            $inventoryBook.Worksheets.Item(1)
+
+        $inventoryTargetSheet.Name = "Inventory"
+
+        $inventorySourceRange =
+            $inventoryTable.Range
+
+        $inventoryTargetRange =
+            $inventoryTargetSheet.Range("A1").Resize(
+                $inventorySourceRange.Rows.Count,
+                $inventorySourceRange.Columns.Count
+            )
+
+        # Values only: do not export worksheet formatting, unused columns,
+        # formulas, workbook links, or macros to the protected CSV payload.
+        $inventoryTargetRange.Value2 =
+            $inventorySourceRange.Value2
 
         if (Test-Path -LiteralPath $inventoryCsv) {
             Remove-Item -LiteralPath $inventoryCsv
@@ -95,7 +155,7 @@ if (-not [string]::IsNullOrWhiteSpace($InventoryWorkbook)) {
         )
 
         Write-Host `
-            "PASS  Inventory worksheet exported privately" `
+            ("PASS  Inventory worksheet exported privately: " + $inventoryCsv) `
             -ForegroundColor Green
     }
     finally {
@@ -121,6 +181,10 @@ if (-not [string]::IsNullOrWhiteSpace($InventoryWorkbook)) {
         }
 
         foreach ($comObject in @(
+            $inventoryTargetRange,
+            $inventoryTargetSheet,
+            $inventorySourceRange,
+            $inventoryTable,
             $inventorySheet,
             $inventoryBook,
             $workbook,
