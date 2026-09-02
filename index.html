@@ -7388,10 +7388,38 @@ const lineBidFleetDiscount =
     lineBidFleetAmounts.customerDiscount
   );
 
+const configuredReplacements = line.included
+  ? []
+  : visibleCartLines
+      .filter(child =>
+        child &&
+        child.included &&
+        clean(child.replacementBaseSku) &&
+        tightSku(child.parentSku) === tightSku(skuOf(line.item)) &&
+        tightSku(skuOf(child.item)) !== tightSku(child.replacementBaseSku)
+      )
+      .map(child => ({
+        sku: skuOf(child.item),
+        name: nameOf(child.item),
+        replacesSku: clean(child.replacementBaseSku),
+        priceAdjustment: lineTotal(child)
+      }));
+
+const configuredReplacementAdjustment =
+  configuredReplacements.reduce(
+    (sum, replacement) =>
+      sum + money(replacement.priceAdjustment),
+    0
+  );
+
 const originalLineTotal =
   line.included
     ? 0
-    : priceOf(line.item) * qty;
+    : Math.max(
+        priceOf(line.item) * qty +
+        configuredReplacementAdjustment,
+        0
+      );
 
 const directLineDiscount =
   line.included
@@ -7452,6 +7480,8 @@ return {
           customerFreightCharge:
             automaticBrandPackageFreight(line),
           item: line.item,
+          name: nameOf(line.item),
+          configuredReplacements,
           originalLineTotal,
           lineDiscount:
             directLineDiscount,
