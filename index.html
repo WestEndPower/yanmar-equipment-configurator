@@ -18740,15 +18740,13 @@ const linePaymentDiscount =
 */
 const packageFinalPrice =
   Math.max(
-    packageTotal -
-    packageCustomerRebate,
+    packageMSRP -
+    packageFactorySaleSavings,
     0
   );
 
 const packageDisplayedSavings =
-  packageFactorySaleSavings +
-  packageCustomerRebate +
-  packageManualDiscount;
+  packageFactorySaleSavings;
 
 const replacementControls = inventoryRecordLocksLine(line)
   ? ''
@@ -19722,6 +19720,9 @@ const paymentDiscount = paymentDiscountAmount(grossSubtotal);
 const westEndDiscount =
   westEndPowerDiscountAmount(grossSubtotal);
 
+const manualLineDiscount =
+  cartLineDiscountTotal();
+
 const bidFleetDiscount =
   bidFleetDiscountAmount();
 
@@ -20018,6 +20019,7 @@ if(discountLine){
 
   const hasDiscount =
     discount > 0 ||
+    manualLineDiscount > 0 ||
     westEndDiscount > 0 ||
     bidFleetDiscount > 0 ||
     hasMinimumProfit;
@@ -20043,15 +20045,17 @@ discountLine.style.fontWeight =
         </div>
       ` : ''}
 
+      ${manualLineDiscount > 0 ? `
+        <div class="stihl-line">
+          <span>West End Power Discount</span>
+          <strong style="color:#c00000;">-${fmtMoney(manualLineDiscount)}</strong>
+        </div>
+      ` : ''}
+
       ${(hasMinimumProfit || westEndDiscount > 0) ? `
         <div class="stihl-line">
-          <span>
-  West End Power Discount
-  <div style="font-size:11px;color:#c00000;font-weight:900;margin-top:2px;">
-  Savings Based on Payment Option
-</div>
-</span>
-<strong style="color:#c00000;">-${fmtMoney(westEndDiscount)}</strong>
+          <span>Savings Based on Payment Option</span>
+          <strong style="color:#c00000;">-${fmtMoney(westEndDiscount)}</strong>
         </div>
       ` : ''}
 
