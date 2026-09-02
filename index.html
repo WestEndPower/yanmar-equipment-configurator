@@ -17829,7 +17829,7 @@ function addRequiredItems(parentItem, parentQty){
   return addedLine;
 }
 
-function replaceCartComponent(parentSku, currentSku, nextSku){
+function replaceCartComponent(parentSku, currentSku, nextSku, nextQty = 1){
   const wantedParent = tightSku(parentSku);
   const wantedCurrent = tightSku(currentSku);
   const wantedNext = tightSku(nextSku);
@@ -17859,17 +17859,27 @@ function replaceCartComponent(parentSku, currentSku, nextSku){
     tightSku(skuOf(item)) === tightSku(baseSku)
   ) || oldLine.item;
 
-  const replacementQty = Number(oldLine.qty) || 1;
+  const parentLine = state.cart.find(line =>
+    !line.requiredItem && tightSku(skuOf(line.item)) === wantedParent
+  );
+  const parentQty = Math.max(1, Number(parentLine && parentLine.qty) || 1);
+  const replacementQty = Math.max(1, Number(nextQty) || 1) * parentQty;
+  const baseQty = Math.max(
+    1,
+    Number(oldLine.replacementBaseQty) || Number(oldLine.qty) || 1
+  );
   const replacementPriceAdjustment = oldLine.included
-    ? (priceOf(nextItem) - priceOf(baseItem)) * replacementQty
+    ? (priceOf(nextItem) * replacementQty) - (priceOf(baseItem) * baseQty)
     : 0;
   const replacementDealerCostAdjustment = oldLine.included
-    ? (effectiveDealerCostOf(nextItem) - effectiveDealerCostOf(baseItem)) * replacementQty
+    ? (effectiveDealerCostOf(nextItem) * replacementQty) -
+      (effectiveDealerCostOf(baseItem) * baseQty)
     : 0;
 
   state.cart[lineIndex] = {
     ...oldLine,
     item: nextItem,
+    qty: replacementQty,
     key:
       'attachment|' +
       skuOf(nextItem) +
@@ -17882,6 +17892,7 @@ function replaceCartComponent(parentSku, currentSku, nextSku){
         ? oldLine.originalReplacementNote || oldLine.note
         : `Replaces standard ${baseSku}`,
     replacementBaseSku: baseSku,
+    replacementBaseQty: baseQty,
     replacementPriceAdjustment,
     replacementDealerCostAdjustment,
     originalReplacementNote:
@@ -17890,6 +17901,18 @@ function replaceCartComponent(parentSku, currentSku, nextSku){
 
   renderDeliveryOptions();
   renderCart();
+}
+
+function numberedReplacementMappings(item){
+  return [1, 2, 3, 4]
+    .map(index => ({
+      sku: clean(item && item[`ReplacementForSKU${index}`]),
+      qty: Math.max(
+        1,
+        Number(item && item[`ReplacementForSKU${index}QTY`]) || 1
+      )
+    }))
+    .filter(mapping => mapping.sku);
 }
 
     function removeCart(key){
@@ -18916,17 +18939,26 @@ const replacementControls = inventoryRecordLocksLine(line)
   .map(child => {
     const baseSku = clean(child.replacementBaseSku) || skuOf(child.item);
     const baseBucketMatch = tightSku(baseSku).match(/^BBUCKET\d+-(.+)$/);
-    const alternatives = state.attachments.filter(item =>
-      (
-        tightSku(item.ReplacementForSKU) === tightSku(baseSku) ||
-        (
-          baseBucketMatch &&
-          tightSku(skuOf(item)) !== tightSku(baseSku) &&
-          tightSku(skuOf(item)).match(/^BBUCKET\d+-(.+)$/)?.[1] === baseBucketMatch[1]
-        )
-      ) &&
-      isCompatibleWithSelectedTool(item, state.selectedTool)
+    const numberedMappings = numberedReplacementMappings(child.item);
+    const numberedSkuSet = new Set(
+      numberedMappings.map(mapping => tightSku(mapping.sku))
     );
+    const alternatives = state.attachments.filter(item => {
+      const candidateSku = tightSku(skuOf(item));
+      const isConfiguredReplacement = numberedSkuSet.has(candidateSku);
+      const isLegacyReplacement =
+        tightSku(item.ReplacementForSKU) === tightSku(baseSku);
+      const isSameBucketFamily =
+        baseBucketMatch &&
+        candidateSku !== tightSku(baseSku) &&
+        candidateSku.match(/^BBUCKET\d+-(.+)$/)?.[1] === baseBucketMatch[1];
+
+      return (
+        numberedMappings.length
+          ? isConfiguredReplacement
+          : (isLegacyReplacement || isSameBucketFamily)
+      ) && isCompatibleWithSelectedTool(item, state.selectedTool);
+    });
 
     if(!alternatives.length) return '';
 
@@ -18934,7 +18966,8 @@ const replacementControls = inventoryRecordLocksLine(line)
       tightSku(skuOf(item)) === tightSku(baseSku)
     ) || child.item;
 
-    const choices = [baseItem, ...alternatives]
+    const choices = [child.item, baseItem, ...alternatives]
+      .filter(item => isCompatibleWithSelectedTool(item, state.selectedTool))
       .filter((item, index, items) =>
         items.findIndex(candidate =>
           tightSku(skuOf(candidate)) === tightSku(skuOf(item))
@@ -18960,6 +18993,11 @@ const replacementControls = inventoryRecordLocksLine(line)
           ${choices.map(choice => `
             <option
               value="${escapeHtml(skuOf(choice))}"
+              data-replacement-qty="${escapeHtml(String(
+                numberedMappings.find(mapping =>
+                  tightSku(mapping.sku) === tightSku(skuOf(choice))
+                )?.qty || 1
+              ))}"
               ${tightSku(skuOf(choice)) === tightSku(skuOf(child.item)) ? 'selected' : ''}>
               ${escapeHtml(nameOf(choice))}${child.included
                 ? (() => {
@@ -19645,7 +19683,8 @@ renderCart();
       replaceCartComponent(
         select.getAttribute('data-replace-component'),
         select.getAttribute('data-current-component'),
-        select.value
+        select.value,
+        select.options[select.selectedIndex]?.getAttribute('data-replacement-qty') || 1
       );
     });
   });
