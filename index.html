@@ -4151,6 +4151,25 @@ function dealerEngine(){
   };
 }
 
+function minimumProfitAmountForLine(line){
+
+  if(!line || !line.item || line.included){
+    return 0;
+  }
+
+  const qty = Number(line.qty) || 1;
+  const inventoryTotals = inventoryTotalsForLine(line);
+
+  if(
+    inventoryTotals.coveredQty >=
+    inventoryTotals.requestedQty
+  ){
+    return inventoryTotals.minimumProfitAmount;
+  }
+
+  return money(line.item.MinimumProfitAmount) * qty;
+}
+
 function minimumProfitAmountTotal(){
 
   return state.cart.reduce((sum,line) => {
@@ -18448,6 +18467,16 @@ function enforceLineDiscountProfitProtection(){
         ? Math.max(linePrice - requestedValue, 0)
         : Math.min(requestedValue, linePrice);
 
+    /* Each equipment line must protect its own cost and minimum profit. */
+    const lineProfitFloor =
+      lineTrueDealerCost(line) +
+      minimumProfitAmountForLine(line);
+
+    const lineAvailableProfit = Math.max(
+      linePrice - lineProfitFloor,
+      0
+    );
+
     const grossSubtotal =
       state.cart.reduce((sum, cartLine) => sum + lineTotal(cartLine), 0) +
       setupFee() +
@@ -18455,10 +18484,13 @@ function enforceLineDiscountProfitProtection(){
       freightFee() +
       warrantyAmount();
 
-    const allowedDollar = profitProtectedDealerDiscountAmount(
-      requestedDollar,
-      grossSubtotal,
-      0
+    const allowedDollar = Math.min(
+      lineAvailableProfit,
+      profitProtectedDealerDiscountAmount(
+        requestedDollar,
+        grossSubtotal,
+        0
+      )
     );
 
     line.discountLimited = allowedDollar + 0.009 < requestedDollar;
