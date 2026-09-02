@@ -17929,6 +17929,20 @@ function numberedReplacementMappings(item){
     .filter(mapping => mapping.sku);
 }
 
+function yanmarSABucketReplacementCompatible(item, tool){
+  const bucketMatch = tightSku(skuOf(item)).match(/^BBUCKET(\d+)-B75P$/);
+  const toolFamily = [tool?.SKU, tool?.Model, tool?.StihlID]
+    .map(value => clean(value).toUpperCase().match(/^(SA223|SA325|SA425)/)?.[1])
+    .find(Boolean);
+
+  if(!bucketMatch || !toolFamily) return false;
+
+  const bucketSize = Number(bucketMatch[1]);
+  const maximumSize = toolFamily === 'SA223' ? 12 : 16;
+
+  return bucketSize <= maximumSize;
+}
+
     function removeCart(key){
   const parent = state.cart.find(x => x.key === key);
 
@@ -18971,7 +18985,10 @@ const replacementControls = inventoryRecordLocksLine(line)
         numberedMappings.length
           ? isConfiguredReplacement
           : (isLegacyReplacement || isSameBucketFamily)
-      ) && isCompatibleWithSelectedTool(item, state.selectedTool);
+      ) && (
+        isCompatibleWithSelectedTool(item, state.selectedTool) ||
+        yanmarSABucketReplacementCompatible(item, state.selectedTool)
+      );
     });
 
     if(!alternatives.length) return '';
@@ -18981,7 +18998,10 @@ const replacementControls = inventoryRecordLocksLine(line)
     ) || child.item;
 
     const choices = [child.item, baseItem, ...alternatives]
-      .filter(item => isCompatibleWithSelectedTool(item, state.selectedTool))
+      .filter(item =>
+        isCompatibleWithSelectedTool(item, state.selectedTool) ||
+        yanmarSABucketReplacementCompatible(item, state.selectedTool)
+      )
       .filter((item, index, items) =>
         items.findIndex(candidate =>
           tightSku(skuOf(candidate)) === tightSku(skuOf(item))
