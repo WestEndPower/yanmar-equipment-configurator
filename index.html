@@ -1703,6 +1703,8 @@ const state = {
   bidFleet: [],
   freightRules: [],
   inventory: [],
+  inventoryAvailability: [],
+  inventoryOnly: false,
   selectedTool: null,
   selectedSystemButton: '',
   selectedPowerButton: '',
@@ -5689,6 +5691,82 @@ renderCart();
   clearDealerDiscountControls();
 }
 
+async function loadPublicInventoryAvailability(){
+
+  try{
+    const response =
+      await fetch(
+        CONFIGURATOR_API +
+        "/inventory-availability",
+        {
+          method:"POST",
+          headers:{
+            "Content-Type":"application/json"
+          },
+          body:JSON.stringify({
+            brandId:
+              clean(ACTIVE_BRAND_ID)
+                .toUpperCase()
+          }),
+          cache:"no-store"
+        }
+      );
+
+    const result =
+      await response.json()
+        .catch(() => ({}));
+
+    if(!response.ok){
+      throw new Error(
+        result.error ||
+        "Inventory availability request failed."
+      );
+    }
+
+    return Array.isArray(result.availability)
+      ? result.availability
+          .map(item => ({
+            sku:clean(item.sku).toUpperCase(),
+            quantity:
+              Math.max(
+                Number(item.quantity) || 0,
+                0
+              )
+          }))
+          .filter(item =>
+            item.sku &&
+            item.quantity > 0
+          )
+      : [];
+
+  }catch(error){
+    console.warn(
+      "Public inventory availability unavailable:",
+      error
+    );
+
+    return [];
+  }
+}
+
+
+function publicInventoryQuantityForSku(sku){
+
+  const wanted =
+    tightSku(sku);
+
+  return state.inventoryAvailability
+    .filter(item =>
+      tightSku(item.sku) === wanted
+    )
+    .reduce(
+      (sum, item) =>
+        sum + (Number(item.quantity) || 0),
+      0
+    );
+}
+
+
 async function init(){
   try{
      const [
@@ -5704,7 +5782,8 @@ async function init(){
   delivery,
   financePrograms,
   bidFleet,
-  freightRules
+  freightRules,
+  publicInventoryAvailability
 ] = await Promise.all([
   loadCSV(DATA_FILES.products),
   loadCSV(DATA_FILES.packages),
@@ -5718,7 +5797,8 @@ async function init(){
   loadCSV(DATA_FILES.delivery),
   loadCSV(DATA_FILES.financePrograms),
   loadCSV(DATA_FILES.bidFleet),
-  loadCSV(DATA_FILES.freightRules)
+  loadCSV(DATA_FILES.freightRules),
+  loadPublicInventoryAvailability()
 ]);
 
 const runtimeData = compatibility;
@@ -6105,6 +6185,9 @@ state.freightRules = freightRules
     clean(rule.Active) === '' || isTrue(rule.Active)
   )
   .sort(sortByOrder);
+state.inventoryAvailability =
+  publicInventoryAvailability;
+
 
 const brandAppearanceApi = window.WestEndConfiguratorBrand;
 
@@ -6422,6 +6505,7 @@ if($('stihl-bid-program-select')){
       $('stihl-search').addEventListener('input', renderTools);
 $('stihl-category').addEventListener('change', () => {
   state.selectedSystemButton = '';
+  state.inventoryOnly = false;
   state.selectedTool = null;
   $('stihl-tool-select').value = '';
   updateSystemButtonVisibility();
@@ -6463,7 +6547,13 @@ if($('stihl-system-buttons')){
 
     btn.classList.add('active');
 
-    state.selectedSystemButton = clean(btn.dataset.system);
+    state.inventoryOnly =
+      btn.dataset.inventoryOnly === 'true';
+
+    state.selectedSystemButton =
+      state.inventoryOnly
+        ? ''
+        : clean(btn.dataset.system);
 
     state.selectedTool = null;
 
@@ -7851,14 +7941,19 @@ function updateSystemButtonVisibility(){
   if(!preferredSeries.length){
     systemBox.style.display = 'none';
     state.selectedSystemButton = '';
+    state.inventoryOnly = false;
     systemBox.innerHTML = '';
     return;
   }
 
   const availableSeries = new Set(
     state.tools
-      .filter(tool => clean(tool.Category).toUpperCase() === categoryKey)
-      .map(tool => clean(tool[filterField]).toUpperCase())
+      .filter(tool =>
+        clean(tool.Category).toUpperCase() === categoryKey
+      )
+      .map(tool =>
+        clean(tool[filterField]).toUpperCase()
+      )
       .filter(Boolean)
   );
 
@@ -7869,18 +7964,54 @@ function updateSystemButtonVisibility(){
   if(
     state.selectedSystemButton &&
     !series.some(item =>
-      item.toUpperCase() === state.selectedSystemButton.toUpperCase()
+      item.toUpperCase() ===
+      state.selectedSystemButton.toUpperCase()
     )
   ){
     state.selectedSystemButton = '';
   }
 
+  const inventoryButton =
+    categoryKey.includes('COMPACT TRACTOR') &&
+    state.inventoryAvailability.length > 0
+      ? `
+        <button
+          type="button"
+          class="stihl-series-btn ${
+            state.inventoryOnly ? 'active' : ''
+          }"
+          data-system=""
+          data-inventory-only="true">
+          In Stock
+        </button>
+      `
+      : '';
+
   systemBox.innerHTML =
-    `<button type="button" class="stihl-series-btn ${state.selectedSystemButton ? '' : 'active'}" data-system="">${allLabel}</button>` +
+    `<button
+      type="button"
+      class="stihl-series-btn ${
+        !state.selectedSystemButton &&
+        !state.inventoryOnly
+          ? 'active'
+          : ''
+      }"
+      data-system="">
+      ${allLabel}
+    </button>` +
+
+    inventoryButton +
+
     series.map(item => `
       <button
         type="button"
-        class="stihl-series-btn ${state.selectedSystemButton.toUpperCase() === item.toUpperCase() ? 'active' : ''}"
+        class="stihl-series-btn ${
+          !state.inventoryOnly &&
+          state.selectedSystemButton.toUpperCase() ===
+            item.toUpperCase()
+            ? 'active'
+            : ''
+        }"
         data-system="${escapeHtml(item)}">
         ${escapeHtml(item)}
       </button>
@@ -7951,6 +8082,15 @@ function renderTools(){
             : tool.Series
         ).toUpperCase() !==
         system.toUpperCase()
+      ){
+        return false;
+      }
+
+      if(
+        state.inventoryOnly &&
+        publicInventoryQuantityForSku(
+          skuOf(tool)
+        ) <= 0
       ){
         return false;
       }
