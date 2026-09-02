@@ -18989,6 +18989,30 @@ const replacementControls = inventoryRecordLocksLine(line)
     const numberedSkuSet = new Set(
       numberedMappings.map(mapping => tightSku(mapping.sku))
     );
+    const selectedToolIsSA = [
+      state.selectedTool?.SKU,
+      state.selectedTool?.Model,
+      state.selectedTool?.StihlID
+    ].some(value => /^SA\d+/.test(clean(value).toUpperCase()));
+    const isSAB75Package =
+      selectedToolIsSA && baseBucketMatch?.[1] === 'B75P';
+
+    function replacementChoiceCompatible(item){
+      const candidateSku = tightSku(skuOf(item));
+
+      /* Numbered workbook mappings are authoritative for YM/YT B75 and
+         B85 packages. SA/B75 packages additionally enforce their model's
+         12-inch or 16-inch maximum. */
+      if(numberedMappings.length && !isSAB75Package){
+        return numberedSkuSet.has(candidateSku);
+      }
+
+      return (
+        isCompatibleWithSelectedTool(item, state.selectedTool) ||
+        yanmarSABucketReplacementCompatible(item, state.selectedTool)
+      );
+    }
+
     const alternatives = state.attachments.filter(item => {
       const candidateSku = tightSku(skuOf(item));
       const isConfiguredReplacement = numberedSkuSet.has(candidateSku);
@@ -19003,10 +19027,7 @@ const replacementControls = inventoryRecordLocksLine(line)
         numberedMappings.length
           ? isConfiguredReplacement
           : (isLegacyReplacement || isSameBucketFamily)
-      ) && (
-        isCompatibleWithSelectedTool(item, state.selectedTool) ||
-        yanmarSABucketReplacementCompatible(item, state.selectedTool)
-      );
+      ) && replacementChoiceCompatible(item);
     });
 
     if(!alternatives.length) return '';
@@ -19017,8 +19038,9 @@ const replacementControls = inventoryRecordLocksLine(line)
 
     const choices = [child.item, baseItem, ...alternatives]
       .filter(item =>
-        isCompatibleWithSelectedTool(item, state.selectedTool) ||
-        yanmarSABucketReplacementCompatible(item, state.selectedTool)
+        tightSku(skuOf(item)) === tightSku(skuOf(child.item)) ||
+        tightSku(skuOf(item)) === tightSku(baseSku) ||
+        replacementChoiceCompatible(item)
       )
       .filter((item, index, items) =>
         items.findIndex(candidate =>
