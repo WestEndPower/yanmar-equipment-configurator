@@ -299,6 +299,7 @@ td{
   <button
     type="button"
     class="quote-btn"
+    id="quote-print-save"
     onclick="printCustomerDocument()">
     Print / Save
   </button>
@@ -309,13 +310,13 @@ td{
     <div id="quote-document-status" class="quote-status">Quote</div>
 
     <div class="dealer-document-tools dealer-panel dealer-screen-only">
-      <h3>Dealer Quote Controls</h3>
+      <h3>Dealer Actions</h3>
       <div style="display:flex;flex-wrap:wrap;gap:10px;">
         <button
           type="button"
           class="quote-btn"
           id="quote-convert-order">
-          Convert to Sales Order
+          Create Sales Order
         </button>
 
         <button
@@ -2899,12 +2900,24 @@ function renderDocumentState(){
     document.getElementById('quote-convert-order');
 
   if(convertButton){
-    convertButton.disabled =
-      !!documentState.orderNumber;
+    convertButton.style.display =
+      documentState.orderNumber ? 'none' : '';
     convertButton.textContent =
-      documentState.orderNumber
-        ? 'Sales Order Created'
-        : 'Convert to Sales Order';
+      'Create Sales Order';
+  }
+
+  const printSaveButton =
+    document.getElementById('quote-print-save');
+
+  if(printSaveButton){
+    printSaveButton.textContent =
+      !documentState.orderNumber
+        ? 'Print / Save Quote'
+        : balance <= 0.009
+          ? 'Print / Save Final Receipt'
+          : received > 0
+            ? 'Print / Save Updated Sales Order'
+            : 'Print / Save Sales Order';
   }
 
   const orderNumberControl =
@@ -3171,26 +3184,32 @@ function toggleDealerCosts(){
     : 'View Costs & Profit';
 }
 
-function printCustomerDocument(){
+async function printCustomerDocument(){
   hideDealerCosts();
   renderDocumentState();
 
   if(
-    documentState.orderNumber &&
-    documentState.dashboardUrl
+    dealerQuoteMode
+  ){
+    const saved = await syncDealerQuoteState();
+    if(!saved) return;
+  }
+
+  if(
+    dealerQuoteMode &&
+    documentState.dashboardUrl &&
+    documentState.dashboardQuoteId > 0
   ){
     const printUrl = new URL(
       documentState.dashboardUrl,
       window.location.href
     );
-    if(documentState.dashboardQuoteId > 0){
-      printUrl.pathname = '/quotes';
-      printUrl.search = '';
-      printUrl.searchParams.set(
-        'id',
-        String(documentState.dashboardQuoteId)
-      );
-    }
+    printUrl.pathname = '/quotes';
+    printUrl.search = '';
+    printUrl.searchParams.set(
+      'id',
+      String(documentState.dashboardQuoteId)
+    );
     printUrl.searchParams.set('print', '1');
     window.open(
       printUrl.toString(),

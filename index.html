@@ -110,6 +110,43 @@
   font-size:14px;
   font-weight:800;
 }
+
+.stihl-more-actions{
+  position:relative;
+  flex:0 1 190px;
+}
+
+.stihl-more-actions > summary{
+  list-style:none;
+  width:100%;
+  box-sizing:border-box;
+}
+
+.stihl-more-actions > summary::-webkit-details-marker{
+  display:none;
+}
+
+.stihl-more-actions-menu{
+  position:absolute;
+  right:0;
+  bottom:calc(100% + 7px);
+  z-index:40;
+  min-width:230px;
+  padding:8px;
+  border:1px solid #d7d7d7;
+  border-radius:10px;
+  background:#fff;
+  box-shadow:0 10px 24px rgba(0,0,0,.16);
+}
+
+.stihl-more-actions-menu .stihl-btn{
+  width:100%;
+  margin:0 0 7px;
+}
+
+.stihl-more-actions-menu .stihl-btn:last-child{
+  margin-bottom:0;
+}
   .stihl-series-buttons{
   display:flex;
   gap:8px;
@@ -1622,16 +1659,24 @@ body.dealer-mode .dealer-only{
 
           <div class="stihl-btn-row">
             <button class="stihl-btn secondary" id="stihl-view-quote" type="button">
-  View / Print Quote
+  Review Quote
 </button>
 
-<button class="stihl-btn light dealer-only" id="stihl-dealer-print" type="button">
-  Print Dealer Worksheet
-</button>
 <button class="stihl-btn light" id="stihl-email-quote" type="button">
-  Confirm Price & Availability
+  Confirm Availability
 </button>
-<button class="stihl-btn danger" id="stihl-clear" type="button">Clear</button>
+
+<details class="stihl-more-actions">
+  <summary class="stihl-btn light">More Actions ▾</summary>
+  <div class="stihl-more-actions-menu">
+    <button class="stihl-btn light dealer-only" id="stihl-dealer-print" type="button">
+      Dealer Worksheet
+    </button>
+    <button class="stihl-btn danger" id="stihl-clear" type="button">
+      Clear Configuration
+    </button>
+  </div>
+</details>
 
           </div>
 
@@ -18998,18 +19043,15 @@ const replacementControls = inventoryRecordLocksLine(line)
       selectedToolIsSA && baseBucketMatch?.[1] === 'B75P';
 
     function replacementChoiceCompatible(item){
-      const candidateSku = tightSku(skuOf(item));
-
-      /* Numbered workbook mappings are authoritative for YM/YT B75 and
-         B85 packages. SA/B75 packages additionally enforce their model's
-         12-inch or 16-inch maximum. */
-      if(numberedMappings.length && !isSAB75Package){
-        return numberedSkuSet.has(candidateSku);
-      }
-
+      /* ReplacementForSKU determines the candidate list. Compatibility
+         columns determine which tractors may use each candidate. SA/B75
+         also has an explicit maximum-size fallback for older exports. */
       return (
         isCompatibleWithSelectedTool(item, state.selectedTool) ||
-        yanmarSABucketReplacementCompatible(item, state.selectedTool)
+        (
+          isSAB75Package &&
+          yanmarSABucketReplacementCompatible(item, state.selectedTool)
+        )
       );
     }
 
