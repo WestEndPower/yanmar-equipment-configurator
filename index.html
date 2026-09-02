@@ -7478,6 +7478,9 @@ const quoteData = {
     manufacturerCostDiscount:
       manufacturerCostDiscountAmount(),
 
+    inventorySelections:
+      inventoryConfirmationDetails(),
+
     dealerFinancials: {
       dealerCost: money($('stihl-dealer-cost-display')?.textContent),
       advertisingFee: money($('stihl-advertising-fee-display')?.textContent),
@@ -14886,7 +14889,9 @@ function inventoryConfirmationDetails(){
               clean(includedRecord.SKU),
             quantity:
               Math.max(Number(included.quantity) || 1, 1),
-            serialNumber:clean(includedRecord.SerialNumber)
+            serialNumber:clean(includedRecord.SerialNumber),
+            store:clean(includedRecord.Store),
+            status:clean(includedRecord.Status)
           };
         })
         .filter(Boolean);
@@ -14900,6 +14905,8 @@ function inventoryConfirmationDetails(){
         quantity:1,
         quantityAvailableAtPrice:1,
         serialNumber:clean(record.SerialNumber),
+        store:clean(record.Store),
+        status:clean(record.Status),
         includedEquipment
       };
     })
