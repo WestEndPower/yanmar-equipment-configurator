@@ -15721,9 +15721,23 @@ function selectedCompatibilityKeys(tool){
     tool?.CompatibilityGroups
   ];
 
+  /*
+    Some exported tractor rows use a broad or blank Series value. Infer the
+    exact model family from the SKU/model so GROUP_SA425, GROUP_SA325, etc.
+    continue to work for package components and replacement choices.
+  */
+  const inferredFamilyKeys = [
+    tool?.SKU,
+    tool?.Model,
+    tool?.StihlID
+  ]
+    .map(value => clean(value).toUpperCase().match(/^(SA\d+|YT\d+|YM\d+|SM\d+)/)?.[1])
+    .filter(Boolean);
+
   const groupKeys = [
     tool?.Series,
-    tool?.CompatibilityGroup
+    tool?.CompatibilityGroup,
+    ...inferredFamilyKeys
   ]
     .flatMap(value => clean(value).split(/[|,;]/))
     .filter(Boolean)
