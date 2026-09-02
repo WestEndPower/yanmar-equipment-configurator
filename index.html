@@ -19951,9 +19951,9 @@ const principalFinanced =
   );
 
 /*
-  Ancillary charges remain taxable and part of
-  the customer payment, but do not inflate
-  equipment profit.
+  Freight and setup/installation are dealer revenue. Delivery and
+  warranty remain outside equipment profit because their related costs
+  are not tracked here.
 */
 const sellingSubtotalForProfit =
   Math.max(
@@ -19997,13 +19997,14 @@ const netDealerCostForProfit =
   );
 
 /*
-  Customer freight offsets the corresponding
-  internal freight cost included in dealer cost.
-  Setup, delivery and warranty remain neutral.
+  Customer freight offsets the corresponding internal freight cost.
+  Setup/installation is earned dealer revenue; delivery and warranty
+  remain neutral until their related costs are tracked.
 */
 const grossProfit =
   sellingSubtotalForProfit +
-  freight -
+  freight +
+  setup -
   netDealerCostForProfit;
 
 const splitForFees =
