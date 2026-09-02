@@ -1000,15 +1000,13 @@ line.paymentMethodAdjustment = 0;
               </td>
 
               <td>
-                <strong>
+<strong>
   ${escapeHtml(itemName(line.item))}
 </strong>
 
-${Array.isArray(line.configuredReplacements) && line.configuredReplacements.length ? `
-  <div style="margin-top:3px;font-size:10px;line-height:1.25;color:#444;font-weight:800;">
-    Configured with ${escapeHtml(line.configuredReplacements
-      .map(replacement => `${replacement.name || replacement.sku}${replacement.sku ? ` (${replacement.sku})` : ''}`)
-      .join(', '))}
+${line.configuredPackageComponent && clean(line.replacesSku) ? `
+  <div style="margin-top:3px;font-size:10px;line-height:1.25;color:#666;font-weight:800;">
+    Replaces ${escapeHtml(line.replacesSku)}
   </div>
 ` : ''}
 
@@ -1068,7 +1066,7 @@ money(line.bidFleetDiscount) > 0
               </td>
 
               <td class="num">
-                ${fmtMoney(originalLinePrice / qty)}
+                ${fmtMoney(unitPrice)}
               </td>
 
               <td id="quote-line-discount-${lineIndex}" class="num" style="
@@ -1088,23 +1086,6 @@ money(line.bidFleetDiscount) > 0
   }
 </td>
             </tr>
-            ${Array.isArray(line.configuredReplacements)
-              ? line.configuredReplacements.map(replacement => `
-                <tr class="configured-replacement-line">
-                  <td>1</td>
-                  <td>
-                    <strong>${escapeHtml(replacement.name || replacement.sku || 'Configured equipment')}</strong>
-                    <div style="margin-top:3px;font-size:10px;color:#666;">
-                      Replaces ${escapeHtml(replacement.replacesSku || 'standard included equipment')}
-                    </div>
-                  </td>
-                  <td>${escapeHtml(replacement.sku || '')}</td>
-                  <td class="num">$0.00</td>
-                  <td class="num">$0.00</td>
-                  <td class="num" style="font-weight:900;">Included</td>
-                </tr>
-              `).join('')
-              : ''}
           `;
 
         }).join('') + `
@@ -1838,12 +1819,13 @@ async function syncDealerQuoteState(){
                     itemSku(line.item),
 
                   name:
-                    clean(line.name) || itemName(line.item),
+                    itemName(line.item),
 
-                  configuredReplacements:
-                    Array.isArray(line.configuredReplacements)
-                      ? line.configuredReplacements
-                      : [],
+                  configuredPackageComponent:
+                    line.configuredPackageComponent === true,
+
+                  replacesSku:
+                    clean(line.replacesSku),
 
                   originalLineTotal:
                     money(
@@ -1865,11 +1847,10 @@ async function syncDealerQuoteState(){
                 visibleLines.map(line => ({
                   qty: Number(line.qty) || 1,
                   sku: itemSku(line.item),
-                  name: clean(line.name) || itemName(line.item),
-                  configuredReplacements:
-                    Array.isArray(line.configuredReplacements)
-                      ? line.configuredReplacements
-                      : [],
+                  name: itemName(line.item),
+                  configuredPackageComponent:
+                    line.configuredPackageComponent === true,
+                  replacesSku: clean(line.replacesSku),
                   originalLineTotal: money(line.originalLineTotal),
                   totalDiscount: money(line.totalDiscount),
                   finalLineTotal: money(line.finalLineTotal),

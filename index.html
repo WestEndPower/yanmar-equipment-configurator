@@ -7388,27 +7388,33 @@ const lineBidFleetDiscount =
     lineBidFleetAmounts.customerDiscount
   );
 
-const configuredReplacements = line.included
+const configuredBuckets = line.included
   ? []
   : state.cart
       .filter(child =>
         child &&
         child.included &&
-        clean(child.replacementBaseSku) &&
         tightSku(child.parentSku) === tightSku(skuOf(line.item)) &&
-        tightSku(skuOf(child.item)) !== tightSku(child.replacementBaseSku)
+        /^BBUCKET\d+/.test(tightSku(skuOf(child.item)))
       )
       .map(child => ({
         sku: skuOf(child.item),
         name: nameOf(child.item),
-        replacesSku: clean(child.replacementBaseSku),
-        priceAdjustment: lineTotal(child)
+        replacesSku:
+          tightSku(skuOf(child.item)) !== tightSku(child.replacementBaseSku)
+            ? clean(child.replacementBaseSku)
+            : '',
+        qty: Math.max(Number(child.qty) || 1, 1),
+        unitPrice: priceOf(child.item),
+        dealerUnitCost: effectiveDealerCostOf(child.item),
+        priceAdjustment: lineTotal(child),
+        item: child.item
       }));
 
 const configuredReplacementAdjustment =
-  configuredReplacements.reduce(
-    (sum, replacement) =>
-      sum + money(replacement.priceAdjustment),
+  configuredBuckets.reduce(
+    (sum, bucket) =>
+      sum + money(bucket.priceAdjustment),
     0
   );
 
@@ -7481,7 +7487,7 @@ return {
             automaticBrandPackageFreight(line),
           item: line.item,
           name: nameOf(line.item),
-          configuredReplacements,
+          configuredBuckets,
           originalLineTotal,
           lineDiscount:
             directLineDiscount,
@@ -7524,6 +7530,59 @@ finalLineTotal:
         };
 
       });
+
+const invoiceQuoteLines = quoteLines.flatMap(line => {
+  const buckets = Array.isArray(line.configuredBuckets)
+    ? line.configuredBuckets
+    : [];
+
+  if(!buckets.length){
+    return [line];
+  }
+
+  const bucketMsrpTotal = buckets.reduce(
+    (sum, bucket) =>
+      sum + money(bucket.unitPrice) * (Number(bucket.qty) || 1),
+    0
+  );
+
+  const allocatedParent = {
+    ...line,
+    originalLineTotal: Math.max(
+      money(line.originalLineTotal) - bucketMsrpTotal,
+      0
+    ),
+    finalLineTotal: Math.max(
+      money(line.finalLineTotal) - bucketMsrpTotal,
+      0
+    )
+  };
+
+  const bucketLines = buckets.map(bucket => {
+    const bucketQty = Math.max(Number(bucket.qty) || 1, 1);
+    const bucketTotal = money(bucket.unitPrice) * bucketQty;
+
+    return {
+      type:'attachment',
+      qty:bucketQty,
+      included:false,
+      configuredPackageComponent:true,
+      replacesSku:clean(bucket.replacesSku),
+      item:bucket.item,
+      name:nameOf(bucket.item),
+      originalLineTotal:bucketTotal,
+      lineDiscount:0,
+      paymentDiscount:0,
+      factoryRebate:0,
+      manualCustomerDiscount:0,
+      bidFleetDiscount:0,
+      totalDiscount:0,
+      finalLineTotal:bucketTotal
+    };
+  });
+
+  return [allocatedParent, ...bucketLines];
+});
 
     const selectedProgram =
   selectedCustomerFinanceProgram();
@@ -7596,7 +7655,7 @@ const quoteData = {
     }
   },
 
-  lines: quoteLines,
+  lines: invoiceQuoteLines,
 
   customer: {
     name:
@@ -10417,19 +10476,53 @@ const printFinanceProgram =
 const lineMsrp =
   unitMsrp * qty;
 
+const packageBuckets = state.cart.filter(child =>
+  child &&
+  child.included &&
+  tightSku(child.parentSku) === tightSku(skuOf(line.item)) &&
+  /^BBUCKET\d+/.test(tightSku(skuOf(child.item)))
+);
+
+const packageBucketMsrp = packageBuckets.reduce(
+  (sum, child) =>
+    sum + priceOf(child.item) * (Number(child.qty) || 1),
+  0
+);
+
+const packageBucketCost = packageBuckets.reduce(
+  (sum, child) =>
+    sum + effectiveDealerCostOf(child.item) * (Number(child.qty) || 1),
+  0
+);
+
+const packageBucketAdjustment = packageBuckets.reduce(
+  (sum, child) => sum + lineTotal(child),
+  0
+);
+
+const allocatedLineMsrp = Math.max(
+  lineMsrp + packageBucketAdjustment - packageBucketMsrp,
+  0
+);
+
 /*
   Calculate the actual customer selling price
   for both the Customer Quote and Dealer Worksheet.
 */
 const cost =
-  lineTrueDealerCost(line);
+  Math.max(lineTrueDealerCost(line) - packageBucketCost, 0);
 
 const baseLinePrice =
-  priceOf(line.item) * qty;
+  Math.max(
+    priceOf(line.item) * qty +
+    packageBucketAdjustment -
+    packageBucketMsrp,
+    0
+  );
 
 const factorySaleDiscount =
   Math.max(
-    lineMsrp - baseLinePrice,
+    allocatedLineMsrp - baseLinePrice,
     0
   );
 
@@ -10466,12 +10559,12 @@ const customerLineDiscount =
     bidFleetLineAmounts.customerDiscount +
     manufacturerDiscount +
     paymentSavings,
-    lineMsrp
+    allocatedLineMsrp
   );
 
 const customerLineTotal =
   Math.max(
-    lineMsrp - customerLineDiscount,
+    allocatedLineMsrp - customerLineDiscount,
     0
   );
 
@@ -10504,12 +10597,52 @@ const dealerMargin =
     ? (dealerProfit / customerLineTotal) * 100
     : 0;
 
+const packageBucketRows = packageBuckets.map(child => {
+  const bucketQty = Math.max(Number(child.qty) || 1, 1);
+  const bucketSku = skuOf(child.item);
+  const replacementText =
+    tightSku(bucketSku) !== tightSku(child.replacementBaseSku) &&
+    clean(child.replacementBaseSku)
+      ? ` — Replaces ${clean(child.replacementBaseSku)}`
+      : '';
+  const bucketDescription = nameOf(child.item) + replacementText;
+  const bucketMsrp = priceOf(child.item) * bucketQty;
+  const bucketCost = effectiveDealerCostOf(child.item) * bucketQty;
+  const bucketProfit = bucketMsrp - bucketCost;
+  const bucketMargin = bucketMsrp > 0
+    ? (bucketProfit / bucketMsrp) * 100
+    : 0;
+
+  return isDealer ? `
+    <tr>
+      <td>${bucketQty}</td>
+      <td>${escapeHtml(bucketSku)}</td>
+      <td>${escapeHtml(bucketDescription)}</td>
+      <td style="text-align:right;">${fmtMoney(bucketMsrp)}</td>
+      <td style="text-align:right;">${fmtMoney(0)}</td>
+      <td style="text-align:right;">${fmtMoney(bucketMsrp)}</td>
+      <td style="text-align:right;">${fmtMoney(bucketCost)}</td>
+      <td style="text-align:right;">${fmtMoney(bucketProfit)}</td>
+      <td style="text-align:right;">${bucketMargin.toFixed(1)}%</td>
+    </tr>
+  ` : `
+    <tr>
+      <td>${bucketQty}</td>
+      <td>${escapeHtml(bucketDescription)}</td>
+      <td>${escapeHtml(bucketSku)}</td>
+      <td style="text-align:right;">${fmtMoney(bucketMsrp)}</td>
+      <td style="text-align:right;">${fmtMoney(0)}</td>
+      <td style="text-align:right;font-weight:800;">${fmtMoney(bucketMsrp)}</td>
+    </tr>
+  `;
+}).join('');
+
 return isDealer ? `
   <tr>
     <td>${qty}</td>
     <td>${escapeHtml(stihlId)}</td>
     <td>${escapeHtml(desc)}</td>
-    <td style="text-align:right;">${fmtMoney(lineMsrp)}</td>
+    <td style="text-align:right;">${fmtMoney(allocatedLineMsrp)}</td>
     <td style="text-align:right;">${fmtMoney(customerLineDiscount)}</td>
 <td style="text-align:right;">${fmtMoney(customerLineTotal)}</td>
 <td style="text-align:right;">${fmtMoney(cost)}</td>
@@ -10538,7 +10671,7 @@ return isDealer ? `
     <td colspan="6"></td>
   </tr>
 ` : ''}
-` : `
+` + packageBucketRows : `
   <tr>
     <td>${qty}</td>
 
@@ -10551,7 +10684,7 @@ return isDealer ? `
     </td>
 
     <td style="text-align:right;">
-      ${fmtMoney(lineMsrp)}
+      ${fmtMoney(allocatedLineMsrp)}
     </td>
 
     <td style="text-align:right;">
@@ -10562,7 +10695,7 @@ return isDealer ? `
       ${fmtMoney(customerLineTotal)}
     </td>
   </tr>
-`;
+` + packageBucketRows;
     })
     .join('');
 
@@ -19146,7 +19279,7 @@ const replacementControls = inventoryRecordLocksLine(line)
               ))}"
               ${tightSku(skuOf(choice)) === tightSku(skuOf(child.item)) ? 'selected' : ''}>
               ${escapeHtml(nameOf(choice))}${child.included
-                ? (() => {
+                ? ` — ${fmtMoney(priceOf(choice))} MSRP${(() => {
                     const isStandard =
                       tightSku(skuOf(choice)) === tightSku(skuOf(baseItem));
 
@@ -19167,7 +19300,7 @@ const replacementControls = inventoryRecordLocksLine(line)
                     }
 
                     return ' — No Price Change';
-                  })()
+                  })()}`
                 : ` — ${fmtMoney(priceOf(choice))}`}
             </option>
           `).join('')}
@@ -19393,11 +19526,19 @@ const packageFreightNotice =
                     </div>
                     <strong style="text-align:right;white-space:nowrap;">
                       ${c.included
-                        ? money(c.replacementPriceAdjustment) > 0
-                          ? `Included + ${fmtMoney(c.replacementPriceAdjustment)}`
-                          : money(c.replacementPriceAdjustment) < 0
-                            ? `Included - ${fmtMoney(Math.abs(c.replacementPriceAdjustment))}`
-                            : 'Included'
+                        ? /^BBUCKET\d+/.test(tightSku(skuOf(c.item)))
+                          ? `${fmtMoney(priceOf(c.item) * (Number(c.qty) || 1))} MSRP • Included${
+                              money(c.replacementPriceAdjustment) > 0
+                                ? ` (+${fmtMoney(c.replacementPriceAdjustment)} package change)`
+                                : money(c.replacementPriceAdjustment) < 0
+                                  ? ` (-${fmtMoney(Math.abs(c.replacementPriceAdjustment))} package change)`
+                                  : ''
+                            }`
+                          : money(c.replacementPriceAdjustment) > 0
+                            ? `Included + ${fmtMoney(c.replacementPriceAdjustment)}`
+                            : money(c.replacementPriceAdjustment) < 0
+                              ? `Included - ${fmtMoney(Math.abs(c.replacementPriceAdjustment))}`
+                              : 'Included'
                         : fmtMoney(priceOf(c.item) * c.qty)}
                     </strong>
                   `).join('')}
