@@ -17930,7 +17930,7 @@ function numberedReplacementMappings(item){
 }
 
 function yanmarSABucketReplacementCompatible(item, tool){
-  const bucketMatch = tightSku(skuOf(item)).match(/^BBUCKET(\d+)-B75P$/);
+  const bucketMatch = tightSku(skuOf(item)).match(/^BBUCKET(\d+)B75P$/);
   const toolFamily = [tool?.SKU, tool?.Model, tool?.StihlID]
     .map(value => clean(value).toUpperCase().match(/^(SA223|SA325|SA425)/)?.[1])
     .find(Boolean);
@@ -18966,7 +18966,7 @@ const replacementControls = inventoryRecordLocksLine(line)
   : childItems
   .map(child => {
     const baseSku = clean(child.replacementBaseSku) || skuOf(child.item);
-    const baseBucketMatch = tightSku(baseSku).match(/^BBUCKET\d+-(.+)$/);
+    const baseBucketMatch = tightSku(baseSku).match(/^BBUCKET\d+(.+)$/);
     const numberedMappings = numberedReplacementMappings(child.item);
     const numberedSkuSet = new Set(
       numberedMappings.map(mapping => tightSku(mapping.sku))
@@ -18979,7 +18979,7 @@ const replacementControls = inventoryRecordLocksLine(line)
       const isSameBucketFamily =
         baseBucketMatch &&
         candidateSku !== tightSku(baseSku) &&
-        candidateSku.match(/^BBUCKET\d+-(.+)$/)?.[1] === baseBucketMatch[1];
+        candidateSku.match(/^BBUCKET\d+(.+)$/)?.[1] === baseBucketMatch[1];
 
       return (
         numberedMappings.length
@@ -19008,8 +19008,8 @@ const replacementControls = inventoryRecordLocksLine(line)
         ) === index
       )
       .sort((a, b) => {
-        const aSize = Number(tightSku(skuOf(a)).match(/^BBUCKET(\d+)-/)?.[1]);
-        const bSize = Number(tightSku(skuOf(b)).match(/^BBUCKET(\d+)-/)?.[1]);
+        const aSize = Number(tightSku(skuOf(a)).match(/^BBUCKET(\d+)/)?.[1]);
+        const bSize = Number(tightSku(skuOf(b)).match(/^BBUCKET(\d+)/)?.[1]);
         return Number.isFinite(aSize) && Number.isFinite(bSize)
           ? aSize - bSize
           : 0;
