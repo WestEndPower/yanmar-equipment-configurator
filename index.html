@@ -803,6 +803,20 @@ body.dealer-mode .dealer-only{
 
           <div class="stihl-option-row">
             <div>
+              <label for="stihl-part-select">Compatible Parts</label>
+              <select id="stihl-part-select">
+                <option value="">Choose compatible part</option>
+              </select>
+            </div>
+            <div>
+              <label for="stihl-part-qty" class="stihl-qty-label">Qty</label>
+              <input id="stihl-part-qty" class="stihl-qty" type="number" min="1" value="1" />
+            </div>
+            <button class="stihl-btn" id="stihl-add-part" type="button">Add</button>
+          </div>
+
+          <div class="stihl-option-row">
+            <div>
               <label for="stihl-attachment-category-select">Select Attachment Type</label>
 <select id="stihl-attachment-category-select">
   <option value="">Choose attachment category</option>
@@ -6586,6 +6600,7 @@ $('stihl-tool-select').addEventListener('change', selectTool);
       $('stihl-add-battery').addEventListener('click', ()=> addSelected('battery'));
       $('stihl-add-charger').addEventListener('click', ()=> addSelected('charger'));
       $('stihl-add-attachment').addEventListener('click', ()=> addSelected('attachment'));
+      $('stihl-add-part').addEventListener('click', ()=> addSelected('part'));
       $('stihl-add-tarter').addEventListener('click', ()=> addSelected('tarter'));
       $('stihl-attachment-category-select').addEventListener(
   'change',
@@ -15304,6 +15319,9 @@ function selectTool(){
   $('stihl-attachment-select').closest('.stihl-option-row').style.display =
     state.selectedTool ? '' : 'none';
 
+  $('stihl-part-select').closest('.stihl-option-row').style.display =
+    state.selectedTool ? '' : 'none';
+
   $('stihl-tarter-select').closest('.stihl-option-row').style.display =
     state.selectedTool ? '' : 'none';
 
@@ -15604,9 +15622,48 @@ function renderAllOptions(){
   renderBatteryOptions();
   renderChargerOptions();
   renderAttachmentOptions();
+  renderPartOptions();
   const accessoryCards = $('stihl-accessory-cards');
   if(accessoryCards) accessoryCards.innerHTML = '';
   renderKMARuntimeMatrix();
+}
+
+function renderPartOptions(){
+  const select = $('stihl-part-select');
+  const tool = state.selectedTool;
+
+  if(!select) return;
+
+  if(!tool){
+    select.innerHTML =
+      '<option value="">Select a tool first</option>';
+    return;
+  }
+
+  const includedPackageSKUs =
+    packageComponentSKUs(tool);
+
+  const compatibleParts = state.parts
+    .filter(part =>
+      skuOf(part) &&
+      (
+        clean(part.Active) === '' ||
+        isTrue(part.Active)
+      ) &&
+      !includedPackageSKUs.has(
+        tightSku(skuOf(part))
+      ) &&
+      isCompatibleWithSelectedTool(part, tool)
+    )
+    .sort(sortByOrder);
+
+  select.innerHTML =
+    '<option value="">Choose compatible part</option>' +
+    compatibleParts.map(part => `
+      <option value="${escapeHtml(skuOf(part))}">
+        ${escapeHtml(nameOf(part))} — ${fmtMoney(priceOf(part))}
+      </option>
+    `).join('');
 }
 
     function renderBatteryOptions(){
@@ -17349,6 +17406,12 @@ function addAccessoryCardToQuote(sku, qty){
       let item, qty = 1;
       if(type === 'battery'){ item = findBattery($('stihl-battery-select').value); qty = Number($('stihl-battery-qty').value)||1; }
       if(type === 'charger'){ item = findCharger($('stihl-charger-select').value); qty = Number($('stihl-charger-qty').value)||1; }
+      if(type === 'part'){
+        item = state.parts.find(part =>
+          skuOf(part) === clean($('stihl-part-select').value)
+        );
+        qty = Number($('stihl-part-qty').value) || 1;
+      }
       if(type === 'tarter'){
 
         const selectedValue =
