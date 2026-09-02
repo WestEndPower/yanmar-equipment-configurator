@@ -1648,18 +1648,29 @@ async function syncDealerQuoteState(){
       0
     );
 
+  const plannedCustomerContributionForSave =
+    Math.max(
+      money(savedPayment.amountDueToday),
+      money(savedPayment.requiredDown)
+    );
+
   if(
-    money(savedPayment.financed) > 0 ||
-    clean(savedPayment.program)
+    paymentAllocationGap > 0 &&
+    plannedCustomerContributionForSave <= 0
   ){
-    paymentPlanForSave.finance +=
-      paymentAllocationGap;
-  }else if(money(paymentPlanForSave.cash) > 0){
-    paymentPlanForSave.cash +=
-      paymentAllocationGap;
-  }else{
-    paymentPlanForSave.credit +=
-      paymentAllocationGap;
+    if(
+      money(savedPayment.financed) > 0 ||
+      clean(savedPayment.program)
+    ){
+      paymentPlanForSave.finance +=
+        paymentAllocationGap;
+    }else if(money(paymentPlanForSave.cash) > 0){
+      paymentPlanForSave.cash +=
+        paymentAllocationGap;
+    }else{
+      paymentPlanForSave.credit +=
+        paymentAllocationGap;
+    }
   }
 
   const remainingAmountDueTodayForSave =
