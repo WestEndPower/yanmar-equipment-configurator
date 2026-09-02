@@ -16063,6 +16063,10 @@ function trimThirdFunctionsToLoaderCapacity(){
       return true;
     }
 
+    if(!requiredSKUsOf(line.item).length){
+      return true;
+    }
+
     const parentSku = clean(line.parentSku);
     const groupKey = `${tightSku(skuOf(line.item))}|${tightSku(parentSku)}`;
     const alreadyUsed = usedByPackage.get(groupKey) || 0;
@@ -17758,7 +17762,10 @@ function addRequiredItems(parentItem, parentQty){
     qty = 1;
   }
 
-  if(isThirdFunctionItem(item)){
+  if(
+    isThirdFunctionItem(item) &&
+    requiredSKUsOf(item).length
+  ){
     const capacity = thirdFunctionCapacityForParent(item, parentSku);
     const selected = thirdFunctionSelectedQtyForParent(item, parentSku);
     const remaining = Math.max(capacity - selected, 0);
