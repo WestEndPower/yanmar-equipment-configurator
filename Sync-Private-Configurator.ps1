@@ -65,6 +65,9 @@ if (-not [string]::IsNullOrWhiteSpace($InventoryWorkbook)) {
 
         $excel.Visible = $false
         $excel.DisplayAlerts = $false
+        $excel.EnableEvents = $false
+        $excel.AskToUpdateLinks = $false
+        $excel.AutomationSecurity = 3
 
         $workbook =
             $excel.Workbooks.Open(
@@ -75,8 +78,6 @@ if (-not [string]::IsNullOrWhiteSpace($InventoryWorkbook)) {
 
         $inventorySheet =
             $workbook.Worksheets.Item("Inventory")
-
-        $excel.CalculateFull()
 
         $inventorySheet.Copy()
 
@@ -99,15 +100,24 @@ if (-not [string]::IsNullOrWhiteSpace($InventoryWorkbook)) {
     }
     finally {
         if ($inventoryBook) {
-            $inventoryBook.Close($false)
+            try {
+                $inventoryBook.Close($false)
+            }
+            catch {}
         }
 
         if ($workbook) {
-            $workbook.Close($false)
+            try {
+                $workbook.Close($false)
+            }
+            catch {}
         }
 
         if ($excel) {
-            $excel.Quit()
+            try {
+                $excel.Quit()
+            }
+            catch {}
         }
 
         foreach ($comObject in @(
@@ -117,9 +127,12 @@ if (-not [string]::IsNullOrWhiteSpace($InventoryWorkbook)) {
             $excel
         )) {
             if ($comObject) {
-                [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject(
-                    $comObject
-                )
+                try {
+                    [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject(
+                        $comObject
+                    )
+                }
+                catch {}
             }
         }
 

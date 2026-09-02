@@ -1702,6 +1702,7 @@ const state = {
   paymentOptions: [],
   bidFleet: [],
   freightRules: [],
+  inventory: [],
   selectedTool: null,
   selectedSystemButton: '',
   selectedPowerButton: '',
@@ -2166,6 +2167,16 @@ function lineDealerCost(line){
 
   if(line.included){
     return money(line.replacementDealerCostAdjustment);
+  }
+
+  const inventoryTotals =
+    inventoryTotalsForLine(line);
+
+  if(
+    inventoryTotals.coveredQty >=
+    inventoryTotals.requestedQty
+  ){
+    return inventoryTotals.actualCost;
   }
 
   const qty =
@@ -4148,9 +4159,22 @@ function minimumProfitAmountTotal(){
       return sum;
     }
 
-    const qty = Number(line.qty) || 1;
+    const qty =
+      Number(line.qty) || 1;
 
-    return sum + (money(line.item.MinimumProfitAmount) * qty);
+    const inventoryTotals =
+      inventoryTotalsForLine(line);
+
+    if(
+      inventoryTotals.coveredQty >=
+      inventoryTotals.requestedQty
+    ){
+      return sum +
+        inventoryTotals.minimumProfitAmount;
+    }
+
+    return sum +
+      (money(line.item.MinimumProfitAmount) * qty);
 
   }, 0);
 }
@@ -12674,18 +12698,25 @@ function lineActualFreightCost(line){
   const raw =
     clean(line.actualFreightCost);
 
-  if(raw === ''){
-    return null;
+  if(raw !== ''){
+
+    const amount =
+      Number(raw);
+
+    return Number.isFinite(amount)
+      ? Math.max(amount, 0)
+      : null;
   }
 
-  const amount =
-    Number(raw);
+  const inventoryTotals =
+    inventoryTotalsForLine(line);
 
-  return Number.isFinite(amount)
-    ? Math.max(amount, 0)
-    : null;
+  if(inventoryTotals.freightComplete){
+    return inventoryTotals.inboundFreight;
+  }
+
+  return null;
 }
-
 function configuratorFreightPolicy(){
   const fallbackBrandId =
     clean(ACTIVE_BRAND_ID).toUpperCase() ||
@@ -17426,6 +17457,10 @@ function addRequiredItems(parentItem, parentQty){
   requiredItem: !!requiredItem,
     parentSku: parentSku || '',
   actualFreightCost: '',
+  inventoryId:
+    preferredInventoryRecordForSku(
+      skuOf(item)
+    )?.InventoryID || '',
   setupSelected:
     assemblyOptionIsValid(item) &&
     !included
@@ -20762,7 +20797,353 @@ function privateDealerRows(data, dataset){
 }
 
 
+function normalizeInventoryRows(rows){
+
+  return (Array.isArray(rows) ? rows : [])
+    .map(row => {
+
+      const itemType =
+        clean(row.ItemType).toUpperCase();
+
+      const quantityText =
+        clean(row.Quantity);
+
+      const includedInventory = [1, 2, 3]
+        .map(number => {
+
+          const inventoryId =
+            clean(row[`IncludedInventoryID${number}`]);
+
+          if(!inventoryId){
+            return null;
+          }
+
+          const quantityValue =
+            clean(row[`IncludedInventoryID${number}Qty`]);
+
+          return {
+            inventoryId,
+            quantity:
+              quantityValue === ''
+                ? 1
+                : Math.max(money(quantityValue), 0)
+          };
+
+        })
+        .filter(Boolean);
+
+      return {
+        ...row,
+        SKU:clean(row.SKU),
+        InventoryID:clean(row.InventoryID),
+        Brand:clean(row.Brand).toUpperCase(),
+        ItemType:itemType,
+        Description:clean(row.Description),
+        SerialNumber:clean(row.SerialNumber),
+        Store:clean(row.Store),
+        Status:clean(row.Status),
+        Quantity:
+          quantityText === ''
+            ? 1
+            : Math.max(money(quantityText), 0),
+        ActualCost:money(row.ActualCost),
+        InboundFreight:money(row.InboundFreight),
+        HasInboundFreight:
+          clean(row.InboundFreight) !== '',
+        LandedCost:money(row.LandedCost),
+        MinimumProfitAmount:
+          money(row.MinimumProfitAmount),
+        MinimumAllowedPrice:
+          money(row.MinimumAllowedPrice),
+        IncludedInventory:includedInventory
+      };
+
+    })
+    .filter(row =>
+      row.ItemType !== 'DIVIDER' &&
+      row.SKU &&
+      row.InventoryID
+    );
+}
+
+
+function inventoryRecordById(inventoryId){
+
+  const wanted =
+    clean(inventoryId).toUpperCase();
+
+  return state.inventory.find(row =>
+    clean(row.InventoryID).toUpperCase() === wanted
+  ) || null;
+}
+
+
+function includedInventoryIdSet(){
+
+  return new Set(
+    state.inventory
+      .flatMap(row =>
+        row.IncludedInventory || []
+      )
+      .map(entry =>
+        clean(entry.inventoryId).toUpperCase()
+      )
+      .filter(Boolean)
+  );
+}
+
+
+function availableInventoryForSku(sku){
+
+  const wantedSku =
+    tightSku(sku);
+
+  const includedIds =
+    includedInventoryIdSet();
+
+  return state.inventory
+    .filter(row =>
+      tightSku(row.SKU) === wantedSku &&
+      clean(row.Status).toUpperCase() === 'IN STOCK' &&
+      Number(row.Quantity) > 0 &&
+      !includedIds.has(
+        clean(row.InventoryID).toUpperCase()
+      )
+    )
+    .sort((a, b) => {
+
+      const dateCompare =
+        clean(a.ReceivedDate).localeCompare(
+          clean(b.ReceivedDate)
+        );
+
+      if(dateCompare !== 0){
+        return dateCompare;
+      }
+
+      return clean(a.InventoryID).localeCompare(
+        clean(b.InventoryID)
+      );
+    });
+}
+
+
+function inventoryBundleTotals(
+  record,
+  multiplier = 1,
+  visited = new Set()
+){
+
+  if(!record || multiplier <= 0){
+    return {
+      actualCost:0,
+      inboundFreight:0,
+      minimumProfitAmount:0,
+      freightComplete:false
+    };
+  }
+
+  const inventoryId =
+    clean(record.InventoryID).toUpperCase();
+
+  if(!inventoryId || visited.has(inventoryId)){
+    return {
+      actualCost:0,
+      inboundFreight:0,
+      minimumProfitAmount:0,
+      freightComplete:false
+    };
+  }
+
+  const nextVisited =
+    new Set(visited);
+
+  nextVisited.add(inventoryId);
+
+  let actualCost =
+    money(record.ActualCost) * multiplier;
+
+  let inboundFreight =
+    money(record.InboundFreight) * multiplier;
+
+  let minimumProfitAmount =
+    money(record.MinimumProfitAmount) * multiplier;
+
+  let freightComplete =
+    !!record.HasInboundFreight;
+
+  for(const included of (record.IncludedInventory || [])){
+
+    const includedRecord =
+      inventoryRecordById(included.inventoryId);
+
+    const includedQuantity =
+      Math.max(
+        Number(included.quantity) || 0,
+        0
+      ) * multiplier;
+
+    const includedTotals =
+      inventoryBundleTotals(
+        includedRecord,
+        includedQuantity,
+        nextVisited
+      );
+
+    actualCost +=
+      includedTotals.actualCost;
+
+    inboundFreight +=
+      includedTotals.inboundFreight;
+
+    minimumProfitAmount +=
+      includedTotals.minimumProfitAmount;
+
+    freightComplete =
+      freightComplete &&
+      !!includedRecord &&
+      includedTotals.freightComplete;
+  }
+
+  return {
+    actualCost,
+    inboundFreight,
+    minimumProfitAmount,
+    freightComplete
+  };
+}
+
+function inventoryAllocationsForLine(line){
+
+  if(
+    !line ||
+    !line.item ||
+    line.included
+  ){
+    return [];
+  }
+
+  const requestedQty =
+    Math.max(Number(line.qty) || 1, 1);
+
+  const available =
+    availableInventoryForSku(
+      skuOf(line.item)
+    );
+
+  const selectedInventoryId =
+    clean(line.inventoryId).toUpperCase();
+
+  if(selectedInventoryId){
+    available.sort((a, b) => {
+
+      const aSelected =
+        clean(a.InventoryID).toUpperCase() ===
+        selectedInventoryId;
+
+      const bSelected =
+        clean(b.InventoryID).toUpperCase() ===
+        selectedInventoryId;
+
+      return Number(bSelected) - Number(aSelected);
+    });
+  }
+
+  const allocations = [];
+  let remaining = requestedQty;
+
+  for(const record of available){
+
+    if(remaining <= 0){
+      break;
+    }
+
+    const allocatedQty =
+      Math.min(
+        Math.max(Number(record.Quantity) || 0, 0),
+        remaining
+      );
+
+    if(allocatedQty <= 0){
+      continue;
+    }
+
+    allocations.push({
+      record,
+      quantity:allocatedQty
+    });
+
+    remaining -= allocatedQty;
+  }
+
+  return allocations;
+}
+
+
+function inventoryTotalsForLine(line){
+
+  const requestedQty =
+    Math.max(Number(line?.qty) || 1, 1);
+
+  const allocations =
+    inventoryAllocationsForLine(line);
+
+  let coveredQty = 0;
+  let actualCost = 0;
+  let inboundFreight = 0;
+  let minimumProfitAmount = 0;
+  let freightComplete =
+    allocations.length > 0;
+
+  for(const allocation of allocations){
+
+    const totals =
+      inventoryBundleTotals(
+        allocation.record,
+        allocation.quantity
+      );
+
+    coveredQty +=
+      allocation.quantity;
+
+    actualCost +=
+      totals.actualCost;
+
+    inboundFreight +=
+      totals.inboundFreight;
+
+    minimumProfitAmount +=
+      totals.minimumProfitAmount;
+
+    freightComplete =
+      freightComplete &&
+      totals.freightComplete;
+  }
+
+  return {
+    requestedQty,
+    coveredQty,
+    actualCost,
+    inboundFreight,
+    minimumProfitAmount,
+    freightComplete:
+      coveredQty >= requestedQty &&
+      freightComplete
+  };
+}
+
+function preferredInventoryRecordForSku(sku){
+
+  return availableInventoryForSku(sku)[0] || null;
+}
+
+
 function applyPrivateDealerData(data){
+
+  state.inventory =
+    normalizeInventoryRows(
+      privateDealerRows(data, "inventory")
+    );
 
   mergePrivateRows(
     state.tools,
