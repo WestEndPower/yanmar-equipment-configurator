@@ -18951,6 +18951,18 @@ const linePaymentDiscount =
   parentLineDiscount +
   childLineDiscount;
 
+/* A package-component substitution changes the configured equipment MSRP.
+   It is not a customer discount or manufacturer rebate. */
+const packageReplacementAdjustment =
+  childItems
+    .filter(child => child.included)
+    .reduce((sum, child) => sum + lineTotal(child), 0);
+
+const packageConfiguredMSRP = Math.max(
+  packageMSRP + packageReplacementAdjustment,
+  0
+);
+
 /*
   The product card shows manufacturer-controlled
   savings only. West End Power payment-option
@@ -18959,11 +18971,8 @@ const linePaymentDiscount =
 */
 const packageFinalPrice =
   Math.max(
-    packageMSRP -
-    packageFactorySaleSavings +
-    childItems
-      .filter(child => child.included)
-      .reduce((sum, child) => sum + lineTotal(child), 0),
+    packageConfiguredMSRP -
+    packageFactorySaleSavings,
     0
   );
 
@@ -19534,7 +19543,7 @@ ${packageFreightNotice ? `
         white-space:nowrap;
         text-align:right;
       ">
-        ${fmtMoney(packageMSRP)}
+        ${fmtMoney(packageConfiguredMSRP)}
       </span>
 
       ${packageDisplayedSavings > 0
