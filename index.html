@@ -20396,8 +20396,21 @@ if($('stihl-payment-remaining-balance')){
   keeps full-card, balance-card and manually entered card
   payments consistent even while controls are being switched.
 */
+/*
+  Until the salesperson records the actual down-payment method, protect
+  the quote using the highest-cost case: the automatically required down
+  payment paid entirely by card. Manually entered cash/card splits still
+  use their actual card portion.
+*/
+const assumedCardDownPayment =
+  selectedProgram &&
+  splitForFees.cashAmount <= 0 &&
+  splitForFees.creditAmount <= 0
+    ? splitForFees.amountDueToday
+    : splitForFees.creditAmount;
+
 const creditCardProcessingFee =
-  paymentCents(splitForFees.creditAmount * 0.03);
+  paymentCents(assumedCardDownPayment * 0.03);
 
 const financingProgramFee =
   selectedProgram
