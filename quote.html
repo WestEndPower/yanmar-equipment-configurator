@@ -2211,6 +2211,12 @@ function recalculatePaymentMethodAdjustment(){
     finance: 0
   };
 
+  let requiredContributionRemaining =
+    Math.max(
+      money(savedPayment.amountDueToday),
+      money(savedPayment.requiredDown)
+    );
+
   activePayments().forEach(payment => {
     const actualClass =
       paymentClass(payment.methodKey);
@@ -2232,6 +2238,22 @@ function recalculatePaymentMethodAdjustment(){
     );
 
     let amountLeft = paymentAmount;
+
+    /*
+      Payments first satisfy the required down payment. They must not
+      reduce the separately agreed financed principal.
+    */
+    const appliedToRequiredContribution =
+      Math.min(
+        amountLeft,
+        requiredContributionRemaining
+      );
+
+    requiredContributionRemaining -=
+      appliedToRequiredContribution;
+
+    amountLeft -=
+      appliedToRequiredContribution;
 
     consumeOrder.forEach(plannedClass => {
       if(amountLeft <= 0) return;
