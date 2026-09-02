@@ -3174,6 +3174,32 @@ function toggleDealerCosts(){
 function printCustomerDocument(){
   hideDealerCosts();
   renderDocumentState();
+
+  if(
+    documentState.orderNumber &&
+    documentState.dashboardUrl
+  ){
+    const printUrl = new URL(
+      documentState.dashboardUrl,
+      window.location.href
+    );
+    if(documentState.dashboardQuoteId > 0){
+      printUrl.pathname = '/quotes';
+      printUrl.search = '';
+      printUrl.searchParams.set(
+        'id',
+        String(documentState.dashboardQuoteId)
+      );
+    }
+    printUrl.searchParams.set('print', '1');
+    window.open(
+      printUrl.toString(),
+      '_blank',
+      'noopener,noreferrer'
+    );
+    return;
+  }
+
   window.print();
 }
 
