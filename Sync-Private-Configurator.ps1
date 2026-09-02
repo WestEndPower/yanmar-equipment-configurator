@@ -51,29 +51,41 @@ if (
     [string]::IsNullOrWhiteSpace($InventoryWorkbook) -and
     $BrandId -eq "YANMAR"
 ) {
-    $inventoryWorkbookCandidate =
-        Get-ChildItem `
-            -LiteralPath $PSScriptRoot `
-            -File `
-            -Filter "YANMAR-Master*.xlsm" `
-            -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTime -Descending |
-        Select-Object -First 1
+    $existingInventoryCsv =
+        Join-Path $privateFolder "inventory.csv"
 
-    if ($inventoryWorkbookCandidate) {
-        $InventoryWorkbook =
-            $inventoryWorkbookCandidate.FullName
-
+    # The Excel export button writes the private inventory CSV before it
+    # launches this script. Reuse that file instead of trying to reopen the
+    # currently open macro workbook from the GitHub repository folder.
+    if (Test-Path -LiteralPath $existingInventoryCsv) {
         Write-Host `
-            ("INFO  Inventory workbook: " + $InventoryWorkbook) `
-            -ForegroundColor Cyan
+            ("PASS  Using existing private inventory export: " + $existingInventoryCsv) `
+            -ForegroundColor Green
     }
     else {
-        throw (
-            "Yanmar inventory workbook was not found beside the sync " +
-            "script. Save YANMAR-Master.xlsm in " + $PSScriptRoot +
-            " or run this script with -InventoryWorkbook."
-        )
+        $inventoryWorkbookCandidate =
+            Get-ChildItem `
+                -LiteralPath $PSScriptRoot `
+                -File `
+                -Filter "YANMAR-Master*.xlsm" `
+                -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+
+        if ($inventoryWorkbookCandidate) {
+            $InventoryWorkbook =
+                $inventoryWorkbookCandidate.FullName
+
+            Write-Host `
+                ("INFO  Inventory workbook: " + $InventoryWorkbook) `
+                -ForegroundColor Cyan
+        }
+        else {
+            throw (
+                "Private inventory export not found: " +
+                $existingInventoryCsv
+            )
+        }
     }
 }
 
