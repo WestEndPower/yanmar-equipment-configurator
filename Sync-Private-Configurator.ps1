@@ -139,6 +139,30 @@ if (-not [string]::IsNullOrWhiteSpace($InventoryWorkbook)) {
                 $inventorySourceRange.Columns.Count
             )
 
+        # Preserve identifiers exactly as entered. Without text formatting,
+        # Excel converts long numeric-looking serial numbers to scientific
+        # notation and can remove leading zeroes during the temporary copy.
+        for (
+            $inventoryColumn = 1;
+            $inventoryColumn -le $inventorySourceRange.Columns.Count;
+            $inventoryColumn++
+        ) {
+            $inventoryHeader =
+                [string]$inventorySourceRange.Cells.Item(
+                    1,
+                    $inventoryColumn
+                ).Text
+
+            if (
+                $inventoryHeader -match
+                '^(SKU|InventoryID|SerialNumber|IncludedInventoryID\d+)$'
+            ) {
+                $inventoryTargetSheet.Columns.Item(
+                    $inventoryColumn
+                ).NumberFormat = "@"
+            }
+        }
+
         # Values only: do not export worksheet formatting, unused columns,
         # formulas, workbook links, or macros to the protected CSV payload.
         $inventoryTargetRange.Value2 =
