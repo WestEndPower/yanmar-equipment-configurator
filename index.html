@@ -14858,6 +14858,81 @@ const toolBrand =
   return true;
 }
     
+function inventoryConfirmationDetails(){
+
+  return state.cart
+    .filter(line => inventoryRecordLocksLine(line))
+    .map(line => {
+      const record = inventoryRecordById(line.inventoryId);
+
+      if(!record){
+        return null;
+      }
+
+      const includedEquipment = (record.IncludedInventory || [])
+        .map(included => {
+          const includedRecord =
+            inventoryRecordById(included.inventoryId);
+
+          if(!includedRecord){
+            return null;
+          }
+
+          return {
+            inventoryId:clean(includedRecord.InventoryID),
+            sku:clean(includedRecord.SKU),
+            description:
+              clean(includedRecord.Description) ||
+              clean(includedRecord.SKU),
+            quantity:
+              Math.max(Number(included.quantity) || 1, 1),
+            serialNumber:clean(includedRecord.SerialNumber)
+          };
+        })
+        .filter(Boolean);
+
+      return {
+        inventoryId:clean(record.InventoryID),
+        sku:clean(record.SKU),
+        description:
+          clean(record.Description) ||
+          nameOf(line.item),
+        quantity:1,
+        quantityAvailableAtPrice:1,
+        serialNumber:clean(record.SerialNumber),
+        includedEquipment
+      };
+    })
+    .filter(Boolean);
+}
+
+function inventoryConfirmationAlert(details){
+
+  if(!details.length){
+    return '';
+  }
+
+  return details
+    .map(detail => {
+      const included = detail.includedEquipment.length
+        ? '\nIncluded equipment: ' +
+          detail.includedEquipment
+            .map(item =>
+              `${item.description} (${item.sku})` +
+              (item.quantity > 1 ? ` x ${item.quantity}` : '')
+            )
+            .join(', ')
+        : '';
+
+      return (
+        `In-stock configured unit requested: ${detail.description} (${detail.sku})` +
+        included +
+        '\nQuantity available at this price: 1'
+      );
+    })
+    .join('\n\n');
+}
+
      async function emailQuote(){
 
   const result =
@@ -14873,9 +14948,15 @@ const toolBrand =
     return;
   }
 
+  const inventoryNotice =
+    inventoryConfirmationAlert(
+      inventoryConfirmationDetails()
+    );
+
   alert(
     'Thank you.\n\n' +
     'Your request has been submitted to West End Power.\n\n' +
+    (inventoryNotice ? inventoryNotice + '\n\n' : '') +
     'A sales representative will review pricing, inventory availability, promotions, delivery options and financing programs and contact you shortly.'
   );
 
@@ -14917,6 +14998,7 @@ async function sendQuoteLead(actionType){
     configurator: configuratorBrandId(),
     source: `${configuratorBrandName()} Equipment Configurator`,
     action: actionType || 'Confirm Price & Availability',
+    inventorySelections:inventoryConfirmationDetails(),
 
     salesperson: clean($('stihl-salesperson')?.value),
 
