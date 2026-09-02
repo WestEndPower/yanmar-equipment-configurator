@@ -17476,7 +17476,10 @@ function addAccessoryCardToQuote(sku, qty){
       }
       if(!item) return;
 
-      if(isThirdFunctionItem(item)){
+      if(
+        isThirdFunctionItem(item) &&
+        requiredSKUsOf(item).length
+      ){
         const requiredLoaderSKUs = requiredSKUsOf(item);
         const loaderLine = state.cart.find(line => {
           if(
