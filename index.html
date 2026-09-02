@@ -20851,19 +20851,15 @@ if(selectedProgram && selectedFinanceIsBelowMinimum(totalBeforeFinanceCheck)){
   }
 
   if($('stihl-minimum-down-status')){
-    const requirementMet =
-      minimumDown <= 0 ||
-      enteredDown >= minimumDown;
-
     $('stihl-minimum-down-status').textContent =
-      requirementMet
-        ? 'Down Payment Requirement Met'
-        : 'Down Payment Not Met';
+      minimumDown > 0
+        ? 'Required Before Financing'
+        : 'Not Required';
 
     $('stihl-minimum-down-status').style.color =
-      requirementMet
-        ? '#1f7a3a'
-        : '#b00020';
+      minimumDown > 0
+        ? '#b00020'
+        : '#1f7a3a';
   }
 
   const amountFinanced =
@@ -20884,8 +20880,15 @@ if(selectedProgram && selectedFinanceIsBelowMinimum(totalBeforeFinanceCheck)){
   }
 
   if($('stihl-minimum-down-display')){
-    $('stihl-minimum-down-display').textContent =
+    const minimumDownRule =
       minimumDownRequirementLabel(selectedProgram);
+
+    $('stihl-minimum-down-display').textContent =
+      minimumDown > 0
+        ? minimumDownRule.includes('%')
+          ? `${minimumDownRule.replace(/\s+required$/i, '')} down / ${fmtMoney(minimumDown)}`
+          : `${fmtMoney(minimumDown)} required`
+        : 'Not Required';
   }
 
   if($('stihl-financed-display')){
