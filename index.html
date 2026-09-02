@@ -7292,8 +7292,14 @@ const quoteBidFleetDetails =
 const quoteProductSubtotal =
   visibleCartLines.reduce((sum, line) => {
 
-    if(!line || line.included){
+    if(!line){
       return sum;
+    }
+
+    /* Included components normally add $0, but a package replacement can
+       carry a positive or negative price adjustment that must reach quotes. */
+    if(line.included){
+      return sum + lineTotal(line);
     }
 
     return sum + lineTotal(line);
@@ -18954,7 +18960,10 @@ const linePaymentDiscount =
 const packageFinalPrice =
   Math.max(
     packageMSRP -
-    packageFactorySaleSavings,
+    packageFactorySaleSavings +
+    childItems
+      .filter(child => child.included)
+      .reduce((sum, child) => sum + lineTotal(child), 0),
     0
   );
 
