@@ -19738,27 +19738,33 @@ const discount = profitProtectedDealerDiscountAmount(
 const applicationFee =
   paymentApplicationFee();
 
-const subtotal = Math.max(
-  grossSubtotal
-  - discount
-  - westEndDiscount
-  - bidFleetDiscount
-  - rebate
-  + customerAdjustment,
-  0
+const subtotal = paymentCents(
+  Math.max(
+    grossSubtotal
+    - discount
+    - westEndDiscount
+    - bidFleetDiscount
+    - rebate
+    + customerAdjustment,
+    0
+  )
 );
 
 const trade = tradeAllowance();
 
-const taxableSubtotal = Math.max(
-  subtotal - trade,
-  0
+const taxableSubtotal = paymentCents(
+  Math.max(
+    subtotal - trade,
+    0
+  )
 );
 
 const tax =
   $('stihl-tax-exempt')?.checked
     ? 0
-    : taxableSubtotal * TAX_RATE;
+    : paymentCents(
+        taxableSubtotal * TAX_RATE
+      );
 
 /*
   A remaining balance is only an amount financed after a
@@ -19768,15 +19774,19 @@ const tax =
 */
 const amountFinanced =
   selectedProgram
-    ? taxableSubtotal +
-      tax -
-      selectedDepositAmount(taxableSubtotal + tax) -
-      recordedSalePaymentAmount(taxableSubtotal + tax)
+    ? paymentCents(
+        taxableSubtotal +
+        tax -
+        selectedDepositAmount(taxableSubtotal + tax) -
+        recordedSalePaymentAmount(taxableSubtotal + tax)
+      )
     : 0;
 
 const principalFinanced =
-  amountFinanced +
-  applicationFee;
+  paymentCents(
+    amountFinanced +
+    applicationFee
+  );
 
 /*
   Ancillary charges remain taxable and part of
@@ -20594,7 +20604,9 @@ const finalSubtotal = subtotal;
 
 const finalTax = tax;
 
-const finalTotal = taxableSubtotal + tax;
+const finalTotal = paymentCents(
+  taxableSubtotal + tax
+);
 
 if(cashFullPaymentSelected() && $('stihl-cash-payment')){
   $('stihl-cash-payment').value = fmtMoney(finalTotal);
