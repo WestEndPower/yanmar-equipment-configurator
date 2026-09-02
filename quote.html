@@ -744,6 +744,7 @@ td{
 <div class="dealer-cost-panel dealer-panel dealer-screen-only" id="dealer-cost-panel">
   <h3>Dealer Costs &amp; Profit</h3>
   <div id="dealer-cost-summary"></div>
+  <div id="dealer-inventory-allocation" style="display:none;margin-top:18px;"></div>
 </div>
 
 <div id="quote-notes-wrap" style="
@@ -1845,7 +1846,12 @@ async function syncDealerQuoteState(){
               },
 
               totals:
-                savedTotals
+                savedTotals,
+
+              inventorySelections:
+                Array.isArray(savedDocument.inventorySelections)
+                  ? savedDocument.inventorySelections
+                  : []
             }
           }),
 
@@ -2490,6 +2496,8 @@ function renderPaymentHistory(){
 }
 
 function renderDealerCosts(){
+  renderDealerInventoryAllocation();
+
   const savedDealerFinancials =
     savedDocument.dealerFinancials &&
     typeof savedDocument.dealerFinancials === 'object'
@@ -2592,6 +2600,83 @@ function renderDealerCosts(){
     <div class="cost-summary-row"><span>Financing Program Fees</span><strong>-${fmtMoney(financeFee)}</strong></div>
     <div class="cost-summary-row"><span>Gross Profit Before Payment Fees</span><strong>${fmtMoney(grossProfit)}</strong></div>
     <div class="cost-summary-row total"><span>Estimated Net Profit</span><strong>${fmtMoney(netProfit)}</strong></div>
+  `;
+}
+
+function renderDealerInventoryAllocation(){
+  const wrap = document.getElementById(
+    'dealer-inventory-allocation'
+  );
+
+  if(!wrap){
+    return;
+  }
+
+  const selections = Array.isArray(
+    savedDocument.inventorySelections
+  )
+    ? savedDocument.inventorySelections
+    : [];
+
+  const rows = selections.flatMap(selection => {
+    const parent = {
+      sku:clean(selection.sku),
+      description:clean(selection.description),
+      serialNumber:clean(selection.serialNumber),
+      quantity:Math.max(Number(selection.quantity) || 1, 1),
+      store:clean(selection.store),
+      status:clean(selection.status)
+    };
+
+    const included = Array.isArray(
+      selection.includedEquipment
+    )
+      ? selection.includedEquipment.map(item => ({
+          sku:clean(item.sku),
+          description:clean(item.description),
+          serialNumber:clean(item.serialNumber),
+          quantity:Math.max(Number(item.quantity) || 1, 1),
+          store:clean(item.store) || parent.store,
+          status:clean(item.status) || parent.status
+        }))
+      : [];
+
+    return [parent, ...included];
+  });
+
+  if(!rows.length){
+    wrap.style.display = 'none';
+    wrap.innerHTML = '';
+    return;
+  }
+
+  wrap.style.display = '';
+  wrap.innerHTML = `
+    <h3 style="margin-bottom:8px;">Inventory Allocation</h3>
+    <table style="margin-top:0;">
+      <thead>
+        <tr>
+          <th>Equipment</th>
+          <th>SKU</th>
+          <th>Serial Number</th>
+          <th class="num">Qty</th>
+          <th>Store</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(row => `
+          <tr>
+            <td>${escapeHtml(row.description || row.sku)}</td>
+            <td>${escapeHtml(row.sku)}</td>
+            <td>${escapeHtml(row.serialNumber || 'Not recorded')}</td>
+            <td class="num">${escapeHtml(row.quantity)}</td>
+            <td>${escapeHtml(row.store || '—')}</td>
+            <td>${escapeHtml(row.status || '—')}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
   `;
 }
 
