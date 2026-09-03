@@ -2196,11 +2196,39 @@ function printBidFleetDiscountAmount(line){
   ).customerDiscount;
 }
 
+function isSeparatelyPricedYanmarPackageBucket(line){
+  if(!line || !line.included || !line.item){
+    return false;
+  }
+
+  const bucketSku = tightSku(skuOf(line.item));
+  const parentSku = tightSku(line.parentSku);
+
+  return (
+    /^BBUCKET\d+/.test(bucketSku) &&
+    /^(SA|YT|YM)/.test(parentSku) &&
+    !/^SM/.test(parentSku)
+  );
+}
+
 function lineTotal(line){
 
   if(!line) return 0;
 
   if(line.included){
+    /*
+      Yanmar SA, YT and YM tractor prices exclude the backhoe bucket even
+      though packages.csv identifies the standard bucket for the package.
+      Charge the currently configured bucket's full MSRP.  The configurator
+      can still label the CSV standard as "Included" because it is included
+      in the displayed configured-package price.  SM package prices already
+      contain their bucket, so they retain the normal $0 included-component
+      behavior.
+    */
+    if(isSeparatelyPricedYanmarPackageBucket(line)){
+      return priceOf(line.item) * (Number(line.qty) || 1);
+    }
+
     return money(line.replacementPriceAdjustment);
   }
 
@@ -2227,6 +2255,11 @@ function lineDealerCost(line){
   }
 
   if(line.included){
+    /* Keep the selected SA/YT/YM bucket's full cost in package profit. */
+    if(isSeparatelyPricedYanmarPackageBucket(line)){
+      return effectiveDealerCostOf(line.item) * (Number(line.qty) || 1);
+    }
+
     return money(line.replacementDealerCostAdjustment);
   }
 
@@ -10489,12 +10522,6 @@ const packageBucketMsrp = packageBuckets.reduce(
   0
 );
 
-const packageBucketCost = packageBuckets.reduce(
-  (sum, child) =>
-    sum + effectiveDealerCostOf(child.item) * (Number(child.qty) || 1),
-  0
-);
-
 const packageBucketAdjustment = packageBuckets.reduce(
   (sum, child) => sum + lineTotal(child),
   0
@@ -10509,8 +10536,13 @@ const allocatedLineMsrp = Math.max(
   Calculate the actual customer selling price
   for both the Customer Quote and Dealer Worksheet.
 */
-const cost =
-  Math.max(lineTrueDealerCost(line) - packageBucketCost, 0);
+/*
+  The parent row reports only the tractor's cost.  A separately priced
+  SA/YT/YM bucket is reported on its own row below, so do not subtract the
+  bucket cost from the tractor cost here.  This preserves both full costs
+  and prevents either one from being counted twice.
+*/
+const cost = lineTrueDealerCost(line);
 
 const baseLinePrice =
   Math.max(
