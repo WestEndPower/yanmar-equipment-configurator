@@ -2255,8 +2255,19 @@ function lineDealerCost(line){
   }
 
   if(line.included){
-    /* Keep the selected SA/YT/YM bucket's full cost in package profit. */
+    /*
+      A serialized tractor package can link its physical bucket through
+      IncludedInventoryID. inventoryBundleTotals() already rolls that
+      bucket's ActualCost into the parent tractor line, so do not count the
+      catalog bucket cost a second time. Current-order packages have no
+      linked inventory bundle and still need the selected bucket's full
+      dealer cost added here.
+    */
     if(isSeparatelyPricedYanmarPackageBucket(line)){
+      if(parentInventoryContainsIncludedLine(line)){
+        return 0;
+      }
+
       return effectiveDealerCostOf(line.item) * (Number(line.qty) || 1);
     }
 
@@ -21659,6 +21670,54 @@ function inventoryRecordById(inventoryId){
 }
 
 
+function inventoryRecordContainsSku(record, sku, visited = new Set()){
+
+  if(!record) return false;
+
+  const inventoryId = clean(record.InventoryID).toUpperCase();
+
+  if(!inventoryId || visited.has(inventoryId)){
+    return false;
+  }
+
+  const nextVisited = new Set(visited);
+  nextVisited.add(inventoryId);
+
+  return (record.IncludedInventory || []).some(included => {
+    const includedRecord = inventoryRecordById(included.inventoryId);
+
+    return !!includedRecord && (
+      tightSku(includedRecord.SKU) === tightSku(sku) ||
+      inventoryRecordContainsSku(includedRecord, sku, nextVisited)
+    );
+  });
+}
+
+
+function parentInventoryContainsIncludedLine(line){
+
+  if(!line || !line.included || !line.item){
+    return false;
+  }
+
+  const parentLine = state.cart.find(candidate =>
+    candidate &&
+    !candidate.included &&
+    !candidate.requiredItem &&
+    (
+      clean(line.parentLineKey) !== ''
+        ? clean(candidate.key) === clean(line.parentLineKey)
+        : tightSku(skuOf(candidate.item)) === tightSku(line.parentSku)
+    )
+  );
+
+  return inventoryRecordContainsSku(
+    inventoryRecordById(parentLine?.inventoryId),
+    skuOf(line.item)
+  );
+}
+
+
 function includedInventoryIdSet(){
 
   return new Set(
@@ -22049,6 +22108,59 @@ function applyPrivateDealerData(data){
     "RuleID",
     ["RuleID"]
   );
+
+  /*
+    A salesperson may configure a unit before opening Dealer Mode. Once
+    private inventory arrives, attach any one-unit current-order line to the
+    matching stock record so ActualCost and linked-component freight replace
+    the catalog estimates immediately.
+  */
+  reconcileExistingCartInventory();
+}
+
+
+function reconcileExistingCartInventory(){
+
+  const usedInventoryIds = new Set(
+    state.cart
+      .map(line => clean(line?.inventoryId).toUpperCase())
+      .filter(Boolean)
+  );
+
+  state.cart.forEach(line => {
+    if(
+      !line ||
+      line.included ||
+      line.requiredItem ||
+      clean(line.inventoryId) ||
+      Math.max(Number(line.qty) || 1, 1) !== 1
+    ){
+      return;
+    }
+
+    const record = availableInventoryForSku(skuOf(line.item)).find(candidate =>
+      !usedInventoryIds.has(clean(candidate.InventoryID).toUpperCase())
+    );
+
+    if(!record) return;
+
+    const oldKey = clean(line.key);
+    const inventoryId = clean(record.InventoryID);
+    const newKey =
+      line.type + '|' + skuOf(line.item) + '|||' +
+      `inventory:${inventoryId}`;
+
+    line.inventoryId = inventoryId;
+    line.currentOrder = false;
+    line.key = newKey;
+    usedInventoryIds.add(inventoryId.toUpperCase());
+
+    state.cart.forEach(child => {
+      if(child && clean(child.parentLineKey) === oldKey){
+        child.parentLineKey = newKey;
+      }
+    });
+  });
 }
 
 
