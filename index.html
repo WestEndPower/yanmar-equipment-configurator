@@ -3846,6 +3846,9 @@ function publicPricingCartContext(){
               line.item.SKU
             ),
 
+          inventoryId:
+            clean(line.inventoryId),
+
           quantity:
             Number(line.qty) || 1
         }))
@@ -3981,6 +3984,7 @@ if(!CONFIGURATOR_API){
     const requestBody = {
     brandId:configuratorBrandId(),
       sku,
+      inventoryId:clean(line?.inventoryId),
       quantity:
         Number(line?.qty) || 1,
             taxExempt:
@@ -19230,6 +19234,14 @@ const packageFinalPrice =
 const packageDisplayedSavings =
   packageFactorySaleSavings;
 
+const packageDisplayedRebate =
+  packageCustomerRebate;
+
+const packageCustomerPrice = Math.max(
+  packageFinalPrice - packageDisplayedRebate,
+  0
+);
+
 const replacementControls = inventoryRecordLocksLine(line)
   ? ''
   : childItems
@@ -19824,7 +19836,7 @@ ${packageFreightNotice ? `
         ${fmtMoney(packageConfiguredMSRP)}
       </span>
 
-      ${packageDisplayedSavings > 0
+      ${(packageDisplayedSavings > 0 || packageDisplayedRebate > 0)
         ? `
           <span style="
             color:#b00020;
@@ -19832,7 +19844,8 @@ ${packageFreightNotice ? `
             white-space:nowrap;
             text-align:right;
           ">
-            -${fmtMoney(packageDisplayedSavings)}
+            -${fmtMoney(packageDisplayedSavings + packageDisplayedRebate)}
+            ${packageDisplayedRebate > 0 ? ' Rebate' : ''}
           </span>
         `
         : `<span></span>`
@@ -19844,29 +19857,12 @@ ${packageFreightNotice ? `
         white-space:nowrap;
         text-align:right;
       ">
-        ${fmtMoney(packageFinalPrice)}
+        ${fmtMoney(packageCustomerPrice)}
       </strong>
     `
   }
 
 </div>
-
-          ${packageCustomerRebate > 0 ? `
-            <div style="
-              margin-top:6px;
-              padding-top:6px;
-              border-top:1px solid #eee;
-              display:flex;
-              justify-content:space-between;
-              gap:12px;
-              color:#b00020;
-              font-size:12px;
-              font-weight:900;
-            ">
-              <span>${escapeHtml(configuratorBrandName())} Manufacturer Rebate</span>
-              <strong>-${fmtMoney(packageCustomerRebate)}</strong>
-            </div>
-          ` : ''}
 
           ${replacementControls ? `
             <div style="margin-top:8px;">
@@ -20563,23 +20559,9 @@ const manufacturerDiscountLine =
   $('stihl-manufacturer-discount-line');
 
 if(manufacturerDiscountLine){
-  const activeManufacturerRebate =
-    customerRebateAmount();
-
-  manufacturerDiscountLine.style.display =
-    activeManufacturerRebate > 0 ? '' : 'none';
-
-  manufacturerDiscountLine.style.fontWeight = '900';
-
-  manufacturerDiscountLine.innerHTML =
-    activeManufacturerRebate > 0
-      ? `
-        <div class="stihl-line">
-          <span>${escapeHtml(configuratorBrandName())} Manufacturer Rebate</span>
-          <strong style="color:#c00000;">-${fmtMoney(activeManufacturerRebate)}</strong>
-        </div>
-      `
-      : '';
+  /* The rebate is displayed between the configured unit prices. */
+  manufacturerDiscountLine.style.display = 'none';
+  manufacturerDiscountLine.innerHTML = '';
 }
 
 const discountLine = $('stihl-discount-line');
