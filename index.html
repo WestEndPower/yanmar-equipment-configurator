@@ -19851,6 +19851,23 @@ ${packageFreightNotice ? `
 
 </div>
 
+          ${packageCustomerRebate > 0 ? `
+            <div style="
+              margin-top:6px;
+              padding-top:6px;
+              border-top:1px solid #eee;
+              display:flex;
+              justify-content:space-between;
+              gap:12px;
+              color:#b00020;
+              font-size:12px;
+              font-weight:900;
+            ">
+              <span>${escapeHtml(configuratorBrandName())} Manufacturer Rebate</span>
+              <strong>-${fmtMoney(packageCustomerRebate)}</strong>
+            </div>
+          ` : ''}
+
           ${replacementControls ? `
             <div style="margin-top:8px;">
               ${replacementControls}
