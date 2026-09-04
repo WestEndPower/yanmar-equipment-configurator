@@ -16505,6 +16505,16 @@ function updateCartLineQuantity(cartIndex, nextQty){
 
   function attachmentCategory(attachment){
 
+    const attachmentSKU =
+      normalizedSKU(
+        attachment?.SKU ||
+        attachment?.StihlID
+      );
+
+    if(/^BBUCKET\d+/.test(attachmentSKU)){
+      return 'Backhoe Bucket';
+    }
+
     return (
       clean(attachment.SubCategory) ||
       'Other Attachments'
@@ -16554,7 +16564,8 @@ function updateCartLineQuantity(cartIndex, nextQty){
         if(
           includedPackageSKUs.has(
             attachmentSKU
-          )
+          ) &&
+          !/^BBUCKET\d+/.test(attachmentSKU)
         ){
           return false;
         }
