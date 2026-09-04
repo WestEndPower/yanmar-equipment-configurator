@@ -3061,8 +3061,21 @@ function cartInternalFreightCostTotal(){
         ...state.cart.filter(childLine =>
           childLine &&
           childLine.item &&
-          !childLine.included &&
-          cartChildBelongsToParent(childLine, parentLine)
+          (
+            (
+              !childLine.included &&
+              cartChildBelongsToParent(childLine, parentLine)
+            ) ||
+            (
+              isSeparatelyPricedYanmarPackageBucket(childLine) &&
+              !parentInventoryContainsIncludedLine(childLine) &&
+              (
+                clean(childLine.parentLineKey) !== ''
+                  ? clean(childLine.parentLineKey) === clean(parentLine.key)
+                  : tightSku(childLine.parentSku) === tightSku(skuOf(parentLine.item))
+              )
+            )
+          )
         )
       ];
 
@@ -4293,11 +4306,29 @@ function dealerEngine(){
 
 function minimumProfitAmountForLine(line){
 
-  if(!line || !line.item || line.included){
+  if(!line || !line.item){
     return 0;
   }
 
   const qty = Number(line.qty) || 1;
+
+  if(line.included){
+    /*
+      Current-order Yanmar packages price the selected bucket separately,
+      so its catalog minimum profit belongs in the package target. A stock
+      package's serialized inventory bundle already includes that bucket's
+      minimum profit in the parent line.
+    */
+    if(
+      isSeparatelyPricedYanmarPackageBucket(line) &&
+      !parentInventoryContainsIncludedLine(line)
+    ){
+      return money(line.item.MinimumProfitAmount) * qty;
+    }
+
+    return 0;
+  }
+
   const inventoryTotals = inventoryTotalsForLine(line);
 
   if(
@@ -4311,31 +4342,11 @@ function minimumProfitAmountForLine(line){
 }
 
 function minimumProfitAmountTotal(){
-
-  return state.cart.reduce((sum,line) => {
-
-    if(!line || !line.item || line.included){
-      return sum;
-    }
-
-    const qty =
-      Number(line.qty) || 1;
-
-    const inventoryTotals =
-      inventoryTotalsForLine(line);
-
-    if(
-      inventoryTotals.coveredQty >=
-      inventoryTotals.requestedQty
-    ){
-      return sum +
-        inventoryTotals.minimumProfitAmount;
-    }
-
-    return sum +
-      (money(line.item.MinimumProfitAmount) * qty);
-
-  }, 0);
+  return state.cart.reduce(
+    (sum,line) =>
+      sum + minimumProfitAmountForLine(line),
+    0
+  );
 }
 
 function parsePromoDate(v){
