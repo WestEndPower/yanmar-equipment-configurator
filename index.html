@@ -13308,10 +13308,24 @@ function brandPackageLineFreightAmount(line){
     );
   }
 
-  const includedRate =
+  let includedRate =
     brandIncludedPackageFreightRate(
       line
     );
+
+  /*
+    The Yanmar workbook defines tractor-package attachments at 2% of
+    dealer cost. Keep the priced SA/YT/YM bucket on that package rate
+    even when the private freight-rule dataset has not loaded yet.
+    Standalone and additional buckets continue through their catalog
+    6% rate because those lines are not included package components.
+  */
+  if(
+    includedRate <= 0 &&
+    isSeparatelyPricedYanmarPackageBucket(line)
+  ){
+    includedRate = 0.02;
+  }
 
   if(includedRate <= 0){
     return 0;
