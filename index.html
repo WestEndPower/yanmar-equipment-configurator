@@ -3824,6 +3824,24 @@ function currentPublicPricingSelection(){
   return null;
 }
 
+function publicPricingInventoryIdForLine(line){
+
+  const explicitInventoryId =
+    clean(line?.inventoryId);
+
+  if(explicitInventoryId){
+    return explicitInventoryId;
+  }
+
+  const allocation =
+    inventoryAllocationsForLine(line)[0];
+
+  return clean(
+    allocation?.record?.InventoryID
+  );
+}
+
+
 function publicPricingCartContext(){
 
   return {
@@ -3847,7 +3865,9 @@ function publicPricingCartContext(){
             ),
 
           inventoryId:
-            clean(line.inventoryId),
+            publicPricingInventoryIdForLine(
+              line
+            ),
 
           quantity:
             Number(line.qty) || 1
@@ -3984,7 +4004,10 @@ if(!CONFIGURATOR_API){
     const requestBody = {
     brandId:configuratorBrandId(),
       sku,
-      inventoryId:clean(line?.inventoryId),
+      inventoryId:
+        publicPricingInventoryIdForLine(
+          line
+        ),
       quantity:
         Number(line?.qty) || 1,
             taxExempt:
