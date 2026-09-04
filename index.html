@@ -13289,7 +13289,11 @@ function brandPackageLineFreightAmount(line){
     Required components are already contained in the factory package.
     They do not receive a separate attachment/accessory freight charge.
   */
-  if(line.requiredItem && line.included){
+  if(
+    line.requiredItem &&
+    line.included &&
+    !isSeparatelyPricedYanmarPackageBucket(line)
+  ){
     return 0;
   }
 
