@@ -3855,7 +3855,12 @@ function publicPricingCartContext(){
         .filter(line =>
           line &&
           line.item &&
-          !line.included
+          (
+            !line.included ||
+            isSeparatelyPricedYanmarPackageBucket(
+              line
+            )
+          )
         )
         .map(line => ({
           sku:
@@ -3866,6 +3871,11 @@ function publicPricingCartContext(){
 
           inventoryId:
             publicPricingInventoryIdForLine(
+              line
+            ),
+
+          includedPriced:
+            isSeparatelyPricedYanmarPackageBucket(
               line
             ),
 
