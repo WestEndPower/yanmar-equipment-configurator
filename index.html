@@ -4157,6 +4157,33 @@ function westEndPowerDiscountForLine(line){
     return 0;
   }
 
+  /*
+    Protected request pricing is calculated once for the complete cart
+    and belongs only to its primary equipment line. Added attachments
+    are already included in that calculation's selling price, cost,
+    freight and minimum-profit target, so allowing each add-on to return
+    another automatic discount would double-count the savings.
+  */
+  const primarySku =
+    publicFinanceSKU(
+      primaryFinanceItem()
+    );
+
+  const primaryLine =
+    state.cart.find(candidate =>
+      candidate &&
+      candidate.item &&
+      !candidate.included &&
+      clean(
+        candidate.item.StihlID ||
+        candidate.item.SKU
+      ) === primarySku
+    );
+
+  if(line !== primaryLine){
+    return 0;
+  }
+
   const serverPricing =
     publicServerPricingForLine(line);
 
