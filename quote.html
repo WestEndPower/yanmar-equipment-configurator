@@ -3209,41 +3209,9 @@ function toggleDealerCosts(){
     : 'View Costs & Profit';
 }
 
-async function printCustomerDocument(){
+function printCustomerDocument(){
   hideDealerCosts();
   renderDocumentState();
-
-  if(
-    dealerQuoteMode
-  ){
-    const saved = await syncDealerQuoteState();
-    if(!saved) return;
-  }
-
-  if(
-    dealerQuoteMode &&
-    documentState.dashboardUrl &&
-    documentState.dashboardQuoteId > 0
-  ){
-    const printUrl = new URL(
-      documentState.dashboardUrl,
-      window.location.href
-    );
-    printUrl.pathname = '/quotes';
-    printUrl.search = '';
-    printUrl.searchParams.set(
-      'id',
-      String(documentState.dashboardQuoteId)
-    );
-    printUrl.searchParams.set('print', '1');
-    window.open(
-      printUrl.toString(),
-      '_blank',
-      'noopener,noreferrer'
-    );
-    return;
-  }
-
   window.print();
 }
 
