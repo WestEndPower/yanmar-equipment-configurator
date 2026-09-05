@@ -335,6 +335,7 @@ td{
 
         <a
           class="quote-btn secondary"
+          id="quote-dashboard"
           href="https://westendpower-configurator-api.westendpower-nm.workers.dev/dashboard"
           target="_blank"
           rel="noopener noreferrer"
@@ -3213,6 +3214,89 @@ function printCustomerDocument(){
   hideDealerCosts();
   renderDocumentState();
   window.print();
+}
+
+function openDealerDashboard(event, destination){
+  if(
+    !dealerQuoteMode ||
+    !dealerSessionToken
+  ){
+    return;
+  }
+
+  event.preventDefault();
+
+  const form =
+    document.createElement('form');
+
+  form.method = 'POST';
+  form.action =
+    CONFIGURATOR_API +
+    '/dealer-dashboard-entry';
+  form.target = '_blank';
+  form.style.display = 'none';
+
+  const fields = {
+    brandId:quoteBrandId,
+    dealerSessionToken,
+    next:destination
+  };
+
+  Object.entries(fields).forEach(
+    ([name,value]) => {
+      const input =
+        document.createElement('input');
+
+      input.type = 'hidden';
+      input.name = name;
+      input.value = value;
+      form.appendChild(input);
+    }
+  );
+
+  document.body.appendChild(form);
+  form.submit();
+  form.remove();
+}
+
+const dashboardButton =
+  document.getElementById(
+    'quote-dashboard'
+  );
+
+if(dashboardButton){
+  dashboardButton.addEventListener(
+    'click',
+    event =>
+      openDealerDashboard(
+        event,
+        '/dashboard'
+      )
+  );
+}
+
+const dashboardQuoteButton =
+  document.getElementById(
+    'quote-view-dashboard'
+  );
+
+if(dashboardQuoteButton){
+  dashboardQuoteButton.addEventListener(
+    'click',
+    event => {
+      const destination =
+        new URL(
+          dashboardQuoteButton.href,
+          window.location.href
+        );
+
+      openDealerDashboard(
+        event,
+        destination.pathname +
+        destination.search
+      );
+    }
+  );
 }
 
 window.addEventListener('beforeprint', hideDealerCosts);
