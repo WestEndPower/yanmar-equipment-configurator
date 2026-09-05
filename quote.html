@@ -3210,9 +3210,49 @@ function toggleDealerCosts(){
     : 'View Costs & Profit';
 }
 
-function printCustomerDocument(){
+async function printCustomerDocument(){
   hideDealerCosts();
   renderDocumentState();
+
+  if(dealerQuoteMode){
+    const saved =
+      await syncDealerQuoteState();
+
+    if(!saved){
+      return;
+    }
+
+    const dashboardQuoteId =
+      Number(
+        documentState.dashboardQuoteId
+      ) || 0;
+
+    if(dashboardQuoteId > 0){
+      const destination =
+        '/quotes?id=' +
+        encodeURIComponent(
+          String(dashboardQuoteId)
+        ) +
+        '&print=1';
+
+      openDealerDashboard(
+        {
+          preventDefault(){}
+        },
+        destination
+      );
+
+      return;
+    }
+
+    alert(
+      'The quote was saved, but its dashboard ' +
+      'record could not be opened.'
+    );
+
+    return;
+  }
+
   window.print();
 }
 
