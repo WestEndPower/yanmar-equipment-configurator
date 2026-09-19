@@ -1537,7 +1537,7 @@ body.dealer-mode .dealer-only{
 </div>
 
 <div class="stihl-line">
-  <span>Advertising Fee</span>
+  <span>Advertising / RMF Fee</span>
   <strong id="stihl-advertising-fee-display">$0.00</strong>
 </div>
 
@@ -15726,7 +15726,116 @@ function selectTool(){
   renderDeliveryOptions();
 renderCart();
 }
-function addToolToQuote(){
+function toolInventoryChoiceQuantity(tool){
+  const sku = skuOf(tool);
+
+  const privateQuantity = availableInventoryForSku(sku)
+    .reduce(
+      (sum, record) =>
+        sum + Math.max(Number(record.Quantity) || 0, 0),
+      0
+    );
+
+  return Math.max(
+    privateQuantity,
+    publicInventoryQuantityForSku(sku)
+  );
+}
+
+function chooseToolInventoryMode(tool, requestedQuantity){
+  const availableQuantity = toolInventoryChoiceQuantity(tool);
+  const selectedInventoryRecord =
+    preferredInventoryRecordForSku(
+      skuOf(tool)
+    );
+
+  const selectedSerialNumber =
+    clean(selectedInventoryRecord?.SerialNumber);
+
+  const selectedInventoryId =
+    clean(selectedInventoryRecord?.InventoryID);
+
+  if(availableQuantity <= 0){
+    return Promise.resolve('orderable');
+  }
+
+  return new Promise(resolve => {
+    const modal = document.createElement('div');
+    modal.className = 'stihl-dealer-modal';
+    modal.style.display = 'flex';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute(
+      'aria-labelledby',
+      'stihl-inventory-choice-title'
+    );
+
+    modal.innerHTML = `
+      <div class="stihl-dealer-box" style="width:min(520px,calc(100vw - 28px));">
+        <h3 id="stihl-inventory-choice-title" style="margin-top:0;">
+          Choose Pricing for ${escapeHtml(skuOf(tool))}
+        </h3>
+
+        <p style="line-height:1.5;">
+          ${availableQuantity} unit${availableQuantity === 1 ? '' : 's'}
+          ${availableQuantity === 1 ? 'is' : 'are'} currently available with
+          inventory-specific pricing. An in-stock configuration is limited
+          to one physical unit.
+        </p>
+
+        <div style="display:grid;gap:10px;margin-top:18px;">
+          <button type="button" class="stihl-btn" data-inventory-choice="stock">
+            Continue With In-Stock Unit
+          </button>
+
+          <button type="button" class="stihl-btn" data-inventory-choice="orderable">
+            Continue With Orderable Unit(s)
+          </button>
+        </div>
+
+        ${document.body.classList.contains('dealer-mode') && selectedInventoryRecord ? `
+          <p class="stihl-note" style="margin-bottom:0;">
+            In-stock unit:
+            ${selectedSerialNumber
+              ? `Serial ${escapeHtml(selectedSerialNumber)}`
+              : 'Serial number not entered'}
+            ${selectedInventoryId
+              ? ` • Inventory ID ${escapeHtml(selectedInventoryId)}`
+              : ''}
+          </p>
+        ` : ''}
+      </div>
+    `;
+
+    const finish = choice => {
+      modal.remove();
+      resolve(choice);
+    };
+
+    modal.querySelectorAll('[data-inventory-choice]').forEach(button => {
+      button.addEventListener('click', () => {
+        finish(clean(button.dataset.inventoryChoice));
+      });
+    });
+
+    modal.addEventListener('keydown', event => {
+      if(event.key === 'Escape'){
+        finish('cancel');
+      }
+    });
+
+    modal.addEventListener('click', event => {
+      if(event.target === modal){
+        finish('cancel');
+      }
+    });
+
+    document.body.appendChild(modal);
+    modal.querySelector('[data-inventory-choice="stock"]')?.focus();
+  });
+}
+
+async function addToolToQuote(){
   const sku = clean($('stihl-tool-select').value);
 
   if(!sku){
@@ -15738,22 +15847,55 @@ function addToolToQuote(){
   if(!tool) return;
 
   const qty = Math.max(1, Number($('stihl-tool-qty').value) || 1);
+  const inventoryMode = await chooseToolInventoryMode(tool, qty);
 
-  /*
-    Add serialized/inventory-priced equipment one physical unit at a time.
-    Any quantity beyond the available inventory becomes a separate current-
-    order line, so inventory and replacement cost are never blended.
-  */
-  for(let unitNumber = 0; unitNumber < qty; unitNumber++){
-    const parentLine = addItem('tool', tool, 1, '');
+  if(inventoryMode === 'cancel'){
+    return;
+  }
 
-    if(parentLine){
-      addIncludedPackageComponents(
-        tool,
-        1,
-        parentLine.key
-      );
-    }
+  if(
+    inventoryMode === 'stock' &&
+    state.cart.some(line =>
+      line &&
+      !line.included &&
+      !line.requiredItem &&
+      (
+        clean(line.inventoryId) ||
+        clean(line.inventorySelection).toLowerCase() === 'stock'
+      )
+    )
+  ){
+    alert(
+      'This configuration already contains an in-stock unit. ' +
+      'Start a separate configuration for another physical inventory unit.'
+    );
+    return;
+  }
+
+  const selectedQuantity =
+    inventoryMode === 'stock'
+      ? 1
+      : qty;
+
+  const parentLine = addItem(
+    'tool',
+    tool,
+    selectedQuantity,
+    '',
+    false,
+    false,
+    false,
+    '',
+    '',
+    inventoryMode
+  );
+
+  if(parentLine){
+    addIncludedPackageComponents(
+      tool,
+      selectedQuantity,
+      parentLine.key
+    );
   }
 
   renderDeliveryOptions();
@@ -18169,11 +18311,14 @@ function addRequiredItems(parentItem, parentQty){
   requiredNumbers.forEach(addRequirementBranch);
 }
     
-    function addItem(type,item,qty,note,included,skipRequired,requiredItem,parentSku,parentLineKey=''){
+    function addItem(type,item,qty,note,included,skipRequired,requiredItem,parentSku,parentLineKey='',inventoryMode=''){
   qty = Number(qty) || 1;
 
+  const forceOrderableUnit =
+    clean(inventoryMode).toLowerCase() === 'orderable';
+
   const inventoryRecord =
-    !included && !requiredItem
+    !included && !requiredItem && !forceOrderableUnit
       ? preferredInventoryRecordForSku(skuOf(item))
       : null;
 
@@ -18234,8 +18379,18 @@ function addRequiredItems(parentItem, parentQty){
   actualFreightCost: '',
   inventoryId:
     inventoryId,
+  inventorySelection:
+    clean(inventoryMode).toLowerCase(),
   currentOrder:
-    !included && !requiredItem && !inventoryId,
+    !included &&
+    !requiredItem &&
+    (
+      forceOrderableUnit ||
+      (
+        !inventoryId &&
+        clean(inventoryMode).toLowerCase() !== 'stock'
+      )
+    ),
   setupSelected:
     assemblyOptionIsValid(item) &&
     !included
@@ -19213,6 +19368,9 @@ if(specialOrderFreightBox){
         sum + lineTotal(c), 0
       );
 
+      const selectedInventoryRecord =
+        inventoryRecordById(line.inventoryId);
+
       const skuText =
         line.type === 'tool'
           ? clean(line.item.StihlID) || skuOf(line.item)
@@ -19937,6 +20095,16 @@ ${packageFreightNotice ? `
               ">
                 In-stock configured unit — only 1 available at this price.
                 Included equipment cannot be changed.
+                ${document.body.classList.contains('dealer-mode') && selectedInventoryRecord ? `
+                  <span style="display:block;margin-top:3px;">
+                    ${clean(selectedInventoryRecord.SerialNumber)
+                      ? `Serial ${escapeHtml(clean(selectedInventoryRecord.SerialNumber))}`
+                      : 'Serial number not entered'}
+                    ${clean(selectedInventoryRecord.InventoryID)
+                      ? ` • Inventory ID ${escapeHtml(clean(selectedInventoryRecord.InventoryID))}`
+                      : ''}
+                  </span>
+                ` : ''}
               </div>
             ` : ''}
 
@@ -22277,6 +22445,7 @@ function reconcileExistingCartInventory(){
       !line ||
       line.included ||
       line.requiredItem ||
+      clean(line.inventorySelection).toLowerCase() === 'orderable' ||
       clean(line.inventoryId) ||
       Math.max(Number(line.qty) || 1, 1) !== 1
     ){
