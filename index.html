@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en" data-configurator-brand="YANMAR">
 <head>
   <!-- =========================================================
@@ -653,7 +653,7 @@ body.dealer-mode .dealer-only{
     id="dealerModeBtn"
     class="stihl-dealer-btn"
     type="button">
-    🔒 Dealer Mode
+    ðŸ”’ Dealer Mode
 </button>
 
 <div id="dealerModeModal" class="stihl-dealer-modal">
@@ -691,10 +691,29 @@ body.dealer-mode .dealer-only{
       <div><label for="stihl-webpage-filter">Products</label><select id="stihl-webpage-filter"><option value="stock">In Stock</option><option value="active">All Active</option></select></div>
       <div><label for="stihl-webpage-filename">Page File Name</label><input id="stihl-webpage-filename" value="equipment-in-stock-ct"></div>
       <div><label for="stihl-webpage-url">Published Page URL</label><input id="stihl-webpage-url" value="https://www.westendpower.com/equipment-in-stock-ct"></div>
+      <div>
+        <label for="stihl-webpage-sort">Sort By</label>
+        <select id="stihl-webpage-sort">
+          <option value="series-asc">Series / Model A-Z</option>
+          <option value="model-desc">Series / Model Z-A</option>
+          <option value="price-asc">Price Low to High</option>
+          <option value="price-desc">Price High to Low</option>
+        </select>
+      </div>
     </div>
     <button class="stihl-btn" id="stihl-generate-webpage" type="button">Generate Page</button>
+    <button class="stihl-btn light" id="stihl-open-webpage-preview" type="button">Open Preview in New Tab</button>
     <div id="stihl-webpage-status" class="stihl-note">Choose a category and generate the current page.</div>
     <div id="stihl-webpage-report" class="stihl-webpage-report"></div>
+    <div style="margin-top:14px;">
+      <strong>Page Preview</strong>
+      <iframe
+        id="stihl-webpage-preview"
+        title="Generated webpage preview"
+        style="width:100%;height:650px;margin-top:8px;border:1px solid #ccc;border-radius:8px;background:#fff;">
+      </iframe>
+    </div>
+
     <textarea id="stihl-webpage-code" spellcheck="false" aria-label="Generated Dealer Spike HTML"></textarea>
     <div class="stihl-btn-row" style="margin-top:12px;"><button class="stihl-btn" id="stihl-copy-webpage" type="button">Copy Dealer Spike Code</button><button class="stihl-btn light" id="stihl-download-webpage" type="button">Download HTML</button><button class="stihl-btn light" id="stihl-close-webpage" type="button">Close</button></div>
   </div>
@@ -1667,7 +1686,7 @@ body.dealer-mode .dealer-only{
 </button>
 
 <details class="stihl-more-actions">
-  <summary class="stihl-btn light">More Actions ▾</summary>
+  <summary class="stihl-btn light">More Actions â–¾</summary>
   <div class="stihl-more-actions-menu">
     <button class="stihl-btn light dealer-only" id="stihl-dealer-print" type="button">
       Dealer Worksheet
@@ -1691,6 +1710,10 @@ body.dealer-mode .dealer-only{
   </main>
 
   <script src="universal/brand-profile.js"></script>
+<script src="universal/brand-profile-template.js"></script>
+<script src="universal/brand-profiles.js"></script>
+
+<script src="universal/webpage-commerce-extension.js"></script>
 
   <!-- =========================================================
        SECTION START: UNIVERSAL CONFIGURATOR SCRIPT
@@ -2816,7 +2839,7 @@ return `
         font-size:15px;
         font-weight:900;
       ">
-        Bid / Fleet Detail — Dealer Use Only
+        Bid / Fleet Detail â€” Dealer Use Only
       </div>
 
       <div style="padding:8px 12px;font-size:12px;">
@@ -2882,7 +2905,7 @@ function dealerKitBreakdownPrintHtml(){
     blocks.push(`
       <div style="margin-top:18px;border:2px solid #1f7a3a;border-radius:10px;overflow:hidden;page-break-inside:avoid;">
         <div style="background:#1f7a3a;color:#fff;padding:8px 12px;font-size:15px;font-weight:900;">
-          Dealer Kit Breakdown — ${escapeHtml(clean(line.item.Model) || skuOf(line.item))}
+          Dealer Kit Breakdown â€” ${escapeHtml(clean(line.item.Model) || skuOf(line.item))}
         </div>
 
         <table style="width:100%;border-collapse:collapse;font-size:10.5px;">
@@ -3631,7 +3654,7 @@ function populateBidFleetPrograms(){
 
         return `
           <option value="${escapeHtml(clean(program.ProgramID))}">
-            ${escapeHtml(clean(program.ProgramName))} — ${fmtMoney(amount)}
+            ${escapeHtml(clean(program.ProgramName))} â€” ${fmtMoney(amount)}
           </option>
         `;
       })
@@ -5569,7 +5592,7 @@ const offerColumns =
       line-height:1.2;
     ">
       Current Factory Offers${offerDate
-        ? ` • Valid Through ${escapeHtml(offerDate)}`
+        ? ` â€¢ Valid Through ${escapeHtml(offerDate)}`
         : ''}
     </div>
 
@@ -8900,7 +8923,7 @@ function openOnlineOrderModal(item){
             line-height:1;
             cursor:pointer;
           ">
-          ×
+          Ã—
         </button>
 
         <div style="
@@ -9880,7 +9903,7 @@ ${transitText ? `
           color:#222;
           margin-bottom:8px;
         ">
-          Important — Please Confirm Before Ordering
+          Important â€” Please Confirm Before Ordering
         </div>
 
         <div style="
@@ -10324,7 +10347,7 @@ function renderAvailability(item){
          href="https://www.google.com/maps/search/?api=1&query=West+End+Power+Equipment+265+Danbury+Road+New+Milford+CT+06776"
          target="_blank"
          rel="noopener"
-         data-tooltip="West End Power Equipment&#10;265 Danbury Road&#10;New Milford, CT 06776&#10;&#10;Sales • Parts • Service&#10;&#10;Click for directions">
+         data-tooltip="West End Power Equipment&#10;265 Danbury Road&#10;New Milford, CT 06776&#10;&#10;Sales â€¢ Parts â€¢ Service&#10;&#10;Click for directions">
          New Milford
       </a>
     `);
@@ -10336,7 +10359,7 @@ function renderAvailability(item){
         href="https://www.google.com/maps/search/?api=1&query=West+End+Power+Equipment+56+Beaver+Brook+Road+Danbury+CT+06810"
          target="_blank"
          rel="noopener"
-         data-tooltip="West End Power Equipment&#10;56 Beaver Brook Road&#10;Danbury, CT 06810&#10;&#10;Sales • Parts • Service&#10;&#10;Click for directions">
+         data-tooltip="West End Power Equipment&#10;56 Beaver Brook Road&#10;Danbury, CT 06810&#10;&#10;Sales â€¢ Parts â€¢ Service&#10;&#10;Click for directions">
          Danbury
       </a>
     `);
@@ -10368,7 +10391,7 @@ function renderAvailability(item){
       color:#1f7a3a;
       margin-bottom:${note ? '8px' : '0'};
     ">
-      ✓ Normally Stocked In: ${stores.join(' & ')}
+      âœ“ Normally Stocked In: ${stores.join(' & ')}
     </div>
 
     ${note ? `
@@ -10498,7 +10521,7 @@ const printFinanceProgram =
     printedSaleRecord.status === 'deposit'
       ? 'Deposit Receipt'
       : printedSaleRecord.status === 'paid'
-        ? 'Sales Order — Paid in Full'
+        ? 'Sales Order â€” Paid in Full'
         : 'Customer Quote';
 
   const paymentRecordBlock =
@@ -10561,13 +10584,13 @@ const printFinanceProgram =
                           'T00:00:00'
                         ).toLocaleDateString()
                       )
-                    : '—'}
+                    : 'â€”'}
                 </td>
 
                 <td>
                   ${printedSaleRecord.reference
                     ? escapeHtml(printedSaleRecord.reference)
-                    : '—'}
+                    : 'â€”'}
                 </td>
 
                 <td style="
@@ -10723,7 +10746,7 @@ const packageBucketRows = packageBuckets.map(child => {
   const replacementText =
     tightSku(bucketSku) !== tightSku(child.replacementBaseSku) &&
     clean(child.replacementBaseSku)
-      ? ` — Replaces ${clean(child.replacementBaseSku)}`
+      ? ` â€” Replaces ${clean(child.replacementBaseSku)}`
       : '';
   const bucketDescription = nameOf(child.item) + replacementText;
   const bucketMsrp = priceOf(child.item) * bucketQty;
@@ -11207,7 +11230,7 @@ ${isDealer ? dealerKitBreakdownPrintHtml() : ''}
     <div>
       Terms:
       <strong>
-        ${money(printFinanceProgram.APR)}% APR •
+        ${money(printFinanceProgram.APR)}% APR â€¢
         ${escapeHtml(clean(printFinanceProgram.TermMonths))} months
       </strong>
     </div>
@@ -11910,7 +11933,7 @@ function priceTagBatteryChargeTime(
   chargerCode
 ){
   if(!battery || !chargerCode){
-    return '—';
+    return 'â€”';
   }
 
   const wanted =
@@ -11950,7 +11973,7 @@ function priceTagBatteryChargeTime(
     }
   }
 
-  return '—';
+  return 'â€”';
 }
 
 async function printPriceTag(printWindowOverride = null){
@@ -12304,7 +12327,7 @@ const kitPerformanceHtml =
             </div>
           ` : ''}
 
-          ${kitChargeTime && kitChargeTime !== '—' ? `
+          ${kitChargeTime && kitChargeTime !== 'â€”' ? `
             <div class="tag-kit-item">
               <span>Charge to 80% / 100%</span>
               <strong>
@@ -12341,7 +12364,7 @@ const runtimeFootnote =
             Current Factory Offers
             ${
               data.validThrough
-                ? ` • Valid Through ${escapeHtml(data.validThrough)}`
+                ? ` â€¢ Valid Through ${escapeHtml(data.validThrough)}`
                 : ''
             }
           </div>
@@ -15590,7 +15613,7 @@ function renderFinancingOptions(){
     const monthlyText =
       protectedPricing &&
       visibleCartLineCount <= 1
-        ? ` • ${fmtMoney(
+        ? ` â€¢ ${fmtMoney(
             protectedPricing.monthly
           )}/mo`
         : "";
@@ -15610,16 +15633,16 @@ function renderFinancingOptions(){
     const scoreText = scoreIsEntered
       ? ''
       : scoreMin > 0 && scoreMax > 0
-        ? ` • Score ${scoreMin}-${scoreMax}`
+        ? ` â€¢ Score ${scoreMin}-${scoreMax}`
         : scoreMin > 0
-          ? ` • Score ${scoreMin}+`
+          ? ` â€¢ Score ${scoreMin}+`
           : scoreMax > 0
-            ? ` • Score up to ${scoreMax}`
+            ? ` â€¢ Score up to ${scoreMax}`
             : '';
 
     return `
       <option value="${escapeHtml(id)}">
-        ${money(p.APR)}% APR • ${clean(p.TermMonths)} mo${monthlyText}${scoreText}
+        ${money(p.APR)}% APR â€¢ ${clean(p.TermMonths)} mo${monthlyText}${scoreText}
       </option>
     `;
   };
@@ -15800,7 +15823,7 @@ function chooseToolInventoryMode(tool, requestedQuantity){
               ? `Serial ${escapeHtml(selectedSerialNumber)}`
               : 'Serial number not entered'}
             ${selectedInventoryId
-              ? ` • Inventory ID ${escapeHtml(selectedInventoryId)}`
+              ? ` â€¢ Inventory ID ${escapeHtml(selectedInventoryId)}`
               : ''}
           </p>
         ` : ''}
@@ -16199,7 +16222,7 @@ function renderPartOptions(){
     '<option value="">Choose compatible part</option>' +
     compatibleParts.map(part => `
       <option value="${escapeHtml(skuOf(part))}">
-        ${escapeHtml(nameOf(part))} — ${fmtMoney(priceOf(part))}
+        ${escapeHtml(nameOf(part))} â€” ${fmtMoney(priceOf(part))}
       </option>
     `).join('');
 }
@@ -16223,7 +16246,7 @@ function renderPartOptions(){
     batteries.map(battery => {
 
       const runtime = state.selectedTool
-        ? ' — Runtime: ' +
+        ? ' â€” Runtime: ' +
           runtimeText(
             state.selectedTool,
             clean(battery.BatteryID) || skuOf(battery)
@@ -16232,7 +16255,7 @@ function renderPartOptions(){
 
       return `
         <option value="${escapeHtml(skuOf(battery))}">
-          ${escapeHtml(nameOf(battery))} —
+          ${escapeHtml(nameOf(battery))} â€”
           ${fmtMoney(priceOf(battery))}
           ${escapeHtml(runtime)}
         </option>
@@ -16242,7 +16265,7 @@ function renderPartOptions(){
 
     function renderChargerOptions(){
       const chargers = compatibleChargers(state.selectedTool);
-      $('stihl-charger-select').innerHTML = '<option value="">Choose charger</option>' + chargers.map(c => `<option value="${escapeHtml(skuOf(c))}">${escapeHtml(nameOf(c))} — ${fmtMoney(priceOf(c))}</option>`).join('');
+      $('stihl-charger-select').innerHTML = '<option value="">Choose charger</option>' + chargers.map(c => `<option value="${escapeHtml(skuOf(c))}">${escapeHtml(nameOf(c))} â€” ${fmtMoney(priceOf(c))}</option>`).join('');
     }
 
 function compatibilityKey(v){
@@ -16825,7 +16848,7 @@ function updateCartLineQuantity(cartIndex, nextQty){
         <option value="${escapeHtml(
           'accessory|' + skuOf(accessory)
         )}">
-          ${escapeHtml(nameOf(accessory))} —
+          ${escapeHtml(nameOf(accessory))} â€”
           ${fmtMoney(priceOf(accessory))}
         </option>
       `)
@@ -16886,7 +16909,7 @@ function updateCartLineQuantity(cartIndex, nextQty){
         <option value="${escapeHtml(
           'variant-index|' + state.attachments.indexOf(attachment)
         )}">
-          ${escapeHtml(nameOf(attachment))} —
+          ${escapeHtml(nameOf(attachment))} â€”
           ${fmtMoney(priceOf(attachment))}
         </option>
       `)
@@ -17001,7 +17024,7 @@ const rows = state.kmaRuntimes.filter(row =>
     : '';
 
   if(!isTrue(r[`${code}_Compatible`]) && !low && !high && !note){
-    return `<td style="${includedStyle}">—</td>`;
+    return `<td style="${includedStyle}">â€”</td>`;
   }
 
   let runtime = 'Varies';
@@ -17483,7 +17506,7 @@ function printRuntimeChart(){
   identification.textContent =
     'Model: ' +
     clean(tool.Model) +
-    ' • SKU #: ' +
+    ' â€¢ SKU #: ' +
     (
       clean(tool.StihlID) ||
       skuOf(tool)
@@ -17569,7 +17592,7 @@ function renderWeightOptions(tool){
   if(!batteryCodes.length) return '';
 
   function batteryChargeCost(battery){
-    if(!battery) return '—';
+    if(!battery) return 'â€”';
 
     const direct =
       clean(battery.CostToCharge) ||
@@ -17584,7 +17607,7 @@ function renderWeightOptions(tool){
       battery.WattHoursCapacity
     );
 
-    if(!wh) return '—';
+    if(!wh) return 'â€”';
 
     const cost =
       (wh / 1000) *
@@ -17594,7 +17617,7 @@ function renderWeightOptions(tool){
   }
 
   function batteryChargeTime(battery, chargerCode){
-    if(!battery || !chargerCode) return '—';
+    if(!battery || !chargerCode) return 'â€”';
 
     const wanted =
       clean(chargerCode).toUpperCase();
@@ -17621,11 +17644,11 @@ function renderWeightOptions(tool){
       if(time100) return time100;
     }
 
-    return '—';
+    return 'â€”';
   }
 
   function batteryCapacityText(battery){
-    if(!battery) return '—';
+    if(!battery) return 'â€”';
 
     const ah =
       clean(
@@ -17641,13 +17664,13 @@ function renderWeightOptions(tool){
         battery.WattHoursCapacity
       );
 
-    if(!ah && !wh) return '—';
+    if(!ah && !wh) return 'â€”';
 
-    return `${ah || '—'} / ${wh || '—'}`;
+    return `${ah || 'â€”'} / ${wh || 'â€”'}`;
   }
 
   function batteryRuntimeValue(code){
-    if(!tool || !code) return '—';
+    if(!tool || !code) return 'â€”';
 
     const low =
       clean(tool[code + 'RunTimeLow']);
@@ -17662,7 +17685,7 @@ function renderWeightOptions(tool){
     if(low) return low;
     if(high) return high;
 
-    return '—';
+    return 'â€”';
   }
 
   function operatingWeight(code){
@@ -17676,7 +17699,7 @@ function renderWeightOptions(tool){
       !Number.isFinite(toolWeight) ||
       !installedBatteryWeight
     ){
-      return '—';
+      return 'â€”';
     }
 
     return `${(
@@ -17849,7 +17872,7 @@ function renderWeightOptions(tool){
                 : '';
 
             const hasPublishedRuntime =
-  batteryRuntimeValue(code) !== '—';
+  batteryRuntimeValue(code) !== 'â€”';
 
 return `
   <tr data-has-runtime="${
@@ -18608,7 +18631,7 @@ function bidFleetLabel(){
 
   return `${clean(bidFleet.program.ProgramName)}${
     bidFleet.tier
-      ? ` • ${clean(bidFleet.tier)}`
+      ? ` â€¢ ${clean(bidFleet.tier)}`
       : ''
   }`;
 }
@@ -18679,36 +18702,36 @@ function approvalStatus(netMargin){
   const target = targetMarginPercent();
 
   if(netMargin >= target){
-    return '✓ Approved';
+    return 'âœ“ Approved';
   }
 
   if(netMargin >= target - 3){
-    return '⚠ Manager Review';
+    return 'âš  Manager Review';
   }
 
-  return '✖ Below Minimum';
+  return 'âœ– Below Minimum';
 }
 
 function profitMeter(netMargin){
   const target = targetMarginPercent();
 
   if(netMargin >= target + 7){
-    return '★★★★★ Excellent';
+    return 'â˜…â˜…â˜…â˜…â˜… Excellent';
   }
 
   if(netMargin >= target + 4){
-    return '★★★★ Strong';
+    return 'â˜…â˜…â˜…â˜… Strong';
   }
 
   if(netMargin >= target){
-    return '★★★ Acceptable';
+    return 'â˜…â˜…â˜… Acceptable';
   }
 
   if(netMargin >= target - 3){
-    return '★★ Manager Review';
+    return 'â˜…â˜… Manager Review';
   }
 
-  return '★ Below Minimum';
+  return 'â˜… Below Minimum';
 }
 
 function dealerRebateAmount(){
@@ -19638,12 +19661,12 @@ const replacementControls = inventoryRecordLocksLine(line)
               ))}"
               ${tightSku(skuOf(choice)) === tightSku(skuOf(child.item)) ? 'selected' : ''}>
               ${escapeHtml(nameOf(choice))}${child.included
-                ? ` — ${fmtMoney(priceOf(choice))} MSRP${(() => {
+                ? ` â€” ${fmtMoney(priceOf(choice))} MSRP${(() => {
                     const isStandard =
                       tightSku(skuOf(choice)) === tightSku(skuOf(baseItem));
 
                     if(isStandard){
-                      return ' — Standard Included';
+                      return ' â€” Standard Included';
                     }
 
                     const difference =
@@ -19651,16 +19674,16 @@ const replacementControls = inventoryRecordLocksLine(line)
                       (Number(child.qty) || 1);
 
                     if(difference > 0){
-                      return ` — Add ${fmtMoney(difference)}`;
+                      return ` â€” Add ${fmtMoney(difference)}`;
                     }
 
                     if(difference < 0){
-                      return ` — Save ${fmtMoney(Math.abs(difference))}`;
+                      return ` â€” Save ${fmtMoney(Math.abs(difference))}`;
                     }
 
-                    return ' — No Price Change';
+                    return ' â€” No Price Change';
                   })()}`
-                : ` — ${fmtMoney(priceOf(choice))}`}
+                : ` â€” ${fmtMoney(priceOf(choice))}`}
             </option>
           `).join('')}
         </select>
@@ -19886,7 +19909,7 @@ const packageFreightNotice =
                     <strong style="text-align:right;white-space:nowrap;">
                       ${c.included
                         ? /^BBUCKET\d+/.test(tightSku(skuOf(c.item)))
-                          ? `${fmtMoney(priceOf(c.item) * (Number(c.qty) || 1))} MSRP • Included${
+                          ? `${fmtMoney(priceOf(c.item) * (Number(c.qty) || 1))} MSRP â€¢ Included${
                               money(c.replacementPriceAdjustment) > 0
                                 ? ` (+${fmtMoney(c.replacementPriceAdjustment)} package change)`
                                 : money(c.replacementPriceAdjustment) < 0
@@ -20083,7 +20106,7 @@ ${packageFreightNotice ? `
                 cursor:pointer;
                 line-height:1;
               ">
-              ×
+              Ã—
             </button>
 
             ${inventoryRecordLocksLine(line) ? `
@@ -20093,7 +20116,7 @@ ${packageFreightNotice ? `
                 font-size:11px;
                 font-weight:900;
               ">
-                In-stock configured unit — only 1 available at this price.
+                In-stock configured unit â€” only 1 available at this price.
                 Included equipment cannot be changed.
                 ${document.body.classList.contains('dealer-mode') && selectedInventoryRecord ? `
                   <span style="display:block;margin-top:3px;">
@@ -20101,7 +20124,7 @@ ${packageFreightNotice ? `
                       ? `Serial ${escapeHtml(clean(selectedInventoryRecord.SerialNumber))}`
                       : 'Serial number not entered'}
                     ${clean(selectedInventoryRecord.InventoryID)
-                      ? ` • Inventory ID ${escapeHtml(clean(selectedInventoryRecord.InventoryID))}`
+                      ? ` â€¢ Inventory ID ${escapeHtml(clean(selectedInventoryRecord.InventoryID))}`
                       : ''}
                   </span>
                 ` : ''}
@@ -20987,7 +21010,7 @@ if(fleetMsg){
     handheldText = 'Tier 2 Qualified';
   }else if(handheldTier1Qualified){
     handheldText =
-      `Tier 1 Qualified • Add ${fmtMoney(Math.max(0, tier2Handheld - handheldTotal))} for Tier 2`;
+      `Tier 1 Qualified â€¢ Add ${fmtMoney(Math.max(0, tier2Handheld - handheldTotal))} for Tier 2`;
   }else{
     handheldText =
       `Add ${fmtMoney(Math.max(0, tier1Handheld - handheldTotal))} for Tier 1`;
@@ -21001,7 +21024,7 @@ if(fleetMsg){
 
   zeroTurnText =
     needed > 0
-      ? `Tier 1 Qualified • Add ${needed} Zero-Turn${needed === 1 ? '' : 's'} for Tier 2`
+      ? `Tier 1 Qualified â€¢ Add ${needed} Zero-Turn${needed === 1 ? '' : 's'} for Tier 2`
       : 'Tier 2 Qualified';
 
 }else if(zeroTurnUnits <= 0){
@@ -21014,7 +21037,7 @@ if(fleetMsg){
 
 }else if(handheldTier1Qualified && zeroTurnUnits >= 1){
   zeroTurnText =
-    `Tier 1 Qualified • Add ${Math.max(0, tier2Units - zeroTurnUnits)} Zero-Turn${Math.max(0, tier2Units - zeroTurnUnits) === 1 ? '' : 's'} for Tier 2`;
+    `Tier 1 Qualified â€¢ Add ${Math.max(0, tier2Units - zeroTurnUnits)} Zero-Turn${Math.max(0, tier2Units - zeroTurnUnits) === 1 ? '' : 's'} for Tier 2`;
 
 }else{
   zeroTurnText =
@@ -21604,33 +21627,196 @@ function updateWebpageDefaults(){
 function generateDealerSpikeWebpage(){
   const category=clean($('stihl-webpage-category')?.value);
   const products=webpageProducts();
+
   if(!products.length){
     $('stihl-webpage-status').className='stihl-error';
     $('stihl-webpage-status').textContent='No matching active products were found.';
     $('stihl-webpage-code').value='';
+
+    const preview=$('stihl-webpage-preview');
+    if(preview) preview.srcdoc='';
+
     return;
   }
+
+  const smartEnabled =
+    document.getElementById('stihl-webpage-smart-catalog')?.checked !== false;
+
+  if(
+    smartEnabled &&
+    window.WestEndWebCatalog &&
+    typeof window.WestEndWebCatalog.buildGeneratedCatalog === 'function'
+  ){
+    const catalog=
+      window.WestEndWebCatalog.buildGeneratedCatalog(
+        products,
+        category
+      );
+
+    if(catalog){
+      const pageUrl=clean($('stihl-webpage-url').value);
+
+      const html=
+        `<!-- Generated by West End Power ${escapeHtml(configuratorBrandName())} Configurator ${new Date().toLocaleString()} -->`+
+        `<div class="wep-page">`+
+          `<section class="wep-hero" style="padding:34px 22px;border-radius:16px;background:#202020;color:#fff;text-align:center;">`+
+            `<p>Available in New Milford &amp; Danbury, Connecticut</p>`+
+            `<h2>${escapeHtml(configuratorBrandName())} ${escapeHtml(category)} at West End Power</h2>`+
+            `<p>Compare models, availability and configuration options.</p>`+
+          `</section>`+
+          catalog+
+          `<section class="wep-hero" style="padding:28px 22px;margin-top:24px;border-radius:16px;background:#202020;color:#fff;text-align:center;">`+
+            `<h2>Need Help Choosing?</h2>`+
+            `<p>Call New Milford at 860-355-8722 or Danbury at 203-792-3030.</p>`+
+          `</section>`+
+          `<p style="font-size:12px">Inventory and pricing are subject to change until confirmed. Page: ${escapeHtml(pageUrl)}</p>`+
+        `</div>`;
+
+      $('stihl-webpage-code').value=html;
+
+      const preview=$('stihl-webpage-preview');
+      if(preview){
+        preview.srcdoc=html;
+      }
+
+      const familyCount =
+        category==='Compact Tractors'
+          ? new Set(
+              products
+                .map(item=>clean(item.Series))
+                .filter(Boolean)
+            ).size
+          : products.length;
+
+      $('stihl-webpage-status').className='stihl-success';
+      $('stihl-webpage-status').textContent=
+        `Interactive webpage ready: ${familyCount} product families from ${products.length} SKUs.`;
+
+      $('stihl-webpage-report').innerHTML=
+        `<div class="stihl-note"><strong>Marketplace mode:</strong> grouped catalog generated successfully.</div>`;
+
+      openGeneratedWebpagePreview();
+
+      return;
+    }
+  }
+
   const missingImages=products.filter(item=>!imageOf(item)).map(skuOf);
   const missingUrls=products.filter(item=>!clean(item.ProductURL)).map(skuOf);
   const missingSpecs=products.filter(item=>!webpageSpecs(item).length).map(skuOf);
+
   const cards=products.map(item=>{
-    const sku=skuOf(item),model=clean(item.Model),image=imageOf(item),details=clean(item.ProductURL);
-    const configure=`${PUBLIC_CONFIG_URL}?category=${encodeURIComponent(category)}&sku=${encodeURIComponent(sku)}`;
-    const price=`${PUBLIC_CONFIG_URL}price-tags/${encodeURIComponent(sku)}.pdf`;
-    const specs=webpageSpecs(item).map(([label,value])=>`<li><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></li>`).join('');
-    return `<article class="wep-card"><div class="wep-media">${image?`<img src="${escapeHtml(image)}" alt="${escapeHtml(configuratorBrandName())} ${escapeHtml(model)} ${escapeHtml(category)}" loading="lazy">`:`<div class="wep-placeholder"><strong>${escapeHtml(model)}</strong><br>Image Coming Soon</div>`}<span>In Stock</span></div><div class="wep-body"><h3>${escapeHtml(displayProductTitle(item))}</h3>${specs?`<ul class="wep-specs">${specs}</ul>`:''}<p><strong>Availability:</strong> New Milford ${(Number(clean(item.QtyNewMilford))||0)>0?'✓':'—'} &nbsp; Danbury ${(Number(clean(item.QtyDanbury))||0)>0?'✓':'—'}</p><div class="wep-actions"><a class="primary" href="${price}" target="_blank" rel="noopener">View Price &amp; Payment Options</a><a href="${configure}" target="_blank" rel="noopener">Configure This Model</a>${details?`<a href="${escapeHtml(details)}" target="_blank" rel="noopener">${escapeHtml(configuratorBrandName())} Model Details</a>`:''}</div><small>SKU ${escapeHtml(sku)}</small></div></article>`;
+    const sku=skuOf(item);
+    const model=clean(item.Model);
+    const image=imageOf(item);
+    const details=clean(item.ProductURL);
+
+    const configure=
+      `${PUBLIC_CONFIG_URL}?category=${encodeURIComponent(category)}&sku=${encodeURIComponent(sku)}`;
+
+    const price=
+      `${PUBLIC_CONFIG_URL}price-tags/${encodeURIComponent(sku)}.pdf`;
+
+    const specs=webpageSpecs(item)
+      .map(([label,value])=>
+        `<li><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></li>`
+      )
+      .join('');
+
+    return `<article class="wep-card"><div class="wep-media">${
+      image
+        ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(configuratorBrandName())} ${escapeHtml(model)} ${escapeHtml(category)}" loading="lazy">`
+        : `<div class="wep-placeholder"><strong>${escapeHtml(model)}</strong><br>Image Coming Soon</div>`
+    }<span>In Stock</span></div><div class="wep-body"><h3>${escapeHtml(displayProductTitle(item))}</h3>${
+      specs ? `<ul class="wep-specs">${specs}</ul>` : ''
+    }<p><strong>Availability:</strong> New Milford ${
+      (Number(clean(item.QtyNewMilford))||0)>0 ? '✓' : '—'
+    } &nbsp; Danbury ${
+      (Number(clean(item.QtyDanbury))||0)>0 ? '✓' : '—'
+    }</p><div class="wep-actions"><a class="primary" href="${price}" target="_blank" rel="noopener">View Price &amp; Payment Options</a><a href="${configure}" target="_blank" rel="noopener">Configure This Model</a>${
+      details
+        ? `<a href="${escapeHtml(details)}" target="_blank" rel="noopener">${escapeHtml(configuratorBrandName())} Model Details</a>`
+        : ''
+    }</div><small>SKU ${escapeHtml(sku)}</small></div></article>`;
   }).join('');
+
   const pageUrl=clean($('stihl-webpage-url').value);
-  const html=`<!-- Generated by West End Power ${escapeHtml(configuratorBrandName())} Configurator ${new Date().toLocaleString()} --><style>.wep-page{max-width:1180px;margin:auto;font:16px/1.5 Arial,sans-serif;color:#171717}.wep-hero{padding:34px 22px;border-radius:16px;background:#202020;color:#fff;text-align:center}.wep-hero h2{font-size:clamp(28px,5vw,46px);margin:0 0 10px}.wep-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px;margin:28px 0}.wep-card{overflow:hidden;border:1px solid #ccc;border-top:6px solid #c8102e;border-radius:14px;background:#fff}.wep-media{position:relative;min-height:260px;display:flex;align-items:center;justify-content:center;background:#f5f5f5}.wep-media img{width:100%;height:300px;object-fit:contain}.wep-media>span{position:absolute;right:12px;top:12px;background:#287a32;color:#fff;border-radius:20px;padding:6px 10px;font-weight:800}.wep-placeholder{text-align:center;font-size:22px}.wep-body{padding:20px}.wep-specs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0;list-style:none}.wep-specs li{padding:8px;border:1px solid #ddd;border-radius:7px;text-align:center}.wep-specs strong,.wep-specs span{display:block}.wep-specs span{font-size:11px}.wep-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}.wep-actions a{display:flex;align-items:center;justify-content:center;min-height:46px;border:2px solid #171717;border-radius:7px;padding:8px;text-decoration:none;font-weight:800;text-align:center}.wep-actions .primary{grid-column:1/-1;background:#c8102e;color:#fff}@media(max-width:760px){.wep-grid{grid-template-columns:1fr}.wep-specs{grid-template-columns:repeat(2,1fr)}}</style><div class="wep-page"><section class="wep-hero"><p>Available in New Milford &amp; Danbury, Connecticut</p><h2>${escapeHtml(configuratorBrandName())} ${escapeHtml(category)} In Stock at West End Power</h2><p>Compare current inventory, product details and payment options, then configure the exact model online.</p></section><div class="wep-grid">${cards}</div><section class="wep-hero"><h2>Need Help Choosing?</h2><p>Call New Milford at 860-355-8722 or Danbury at 203-792-3030.</p></section><p style="font-size:12px">Inventory and pricing are subject to change until confirmed. Page: ${escapeHtml(pageUrl)}</p></div>`;
+
+  const html=
+    `<!-- Generated by West End Power ${escapeHtml(configuratorBrandName())} Configurator ${new Date().toLocaleString()} -->`+
+    `<style>.wep-page{max-width:1180px;margin:auto;font:16px/1.5 Arial,sans-serif;color:#171717}.wep-hero{padding:34px 22px;border-radius:16px;background:#202020;color:#fff;text-align:center}.wep-hero h2{font-size:clamp(28px,5vw,46px);margin:0 0 10px}.wep-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px;margin:28px 0}.wep-card{overflow:hidden;border:1px solid #ccc;border-top:6px solid #c8102e;border-radius:14px;background:#fff}.wep-media{position:relative;min-height:260px;display:flex;align-items:center;justify-content:center;background:#f5f5f5}.wep-media img{width:100%;height:300px;object-fit:contain}.wep-media>span{position:absolute;right:12px;top:12px;background:#287a32;color:#fff;border-radius:20px;padding:6px 10px;font-weight:800}.wep-placeholder{text-align:center;font-size:22px}.wep-body{padding:20px}.wep-specs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0;list-style:none}.wep-specs li{padding:8px;border:1px solid #ddd;border-radius:7px;text-align:center}.wep-specs strong,.wep-specs span{display:block}.wep-specs span{font-size:11px}.wep-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}.wep-actions a{display:flex;align-items:center;justify-content:center;min-height:46px;border:2px solid #171717;border-radius:7px;padding:8px;text-decoration:none;font-weight:800;text-align:center}.wep-actions .primary{grid-column:1/-1;background:#c8102e;color:#fff}@media(max-width:760px){.wep-grid{grid-template-columns:1fr}.wep-specs{grid-template-columns:repeat(2,1fr)}}</style>`+
+    `<div class="wep-page"><section class="wep-hero"><p>Available in New Milford &amp; Danbury, Connecticut</p><h2>${escapeHtml(configuratorBrandName())} ${escapeHtml(category)} In Stock at West End Power</h2><p>Compare current inventory, product details and payment options, then configure the exact model online.</p></section><div class="wep-grid">${cards}</div><section class="wep-hero"><h2>Need Help Choosing?</h2><p>Call New Milford at 860-355-8722 or Danbury at 203-792-3030.</p></section><p style="font-size:12px">Inventory and pricing are subject to change until confirmed. Page: ${escapeHtml(pageUrl)}</p></div>`;
+
   $('stihl-webpage-code').value=html;
+
+  const preview=$('stihl-webpage-preview');
+  if(preview){
+    preview.srcdoc=html;
+  }
+
   $('stihl-webpage-status').className='stihl-success';
-  $('stihl-webpage-status').textContent=`Webpage ready: ${products.length} ${category} product${products.length===1?'':'s'}.`;
+  $('stihl-webpage-status').textContent=
+    `Webpage ready: ${products.length} ${category} product${products.length===1?'':'s'}.`;
+
   const report=[];
-  if(missingImages.length) report.push(`<strong>Missing ImageURL:</strong> ${missingImages.join(', ')}`);
-  if(missingUrls.length) report.push(`<strong>Missing ProductURL (details button hidden):</strong> ${missingUrls.join(', ')}`);
-  if(missingSpecs.length) report.push(`<strong>Missing specifications:</strong> ${missingSpecs.join(', ')}`);
-  report.push(`<strong>Expected price-tag PDFs:</strong> ${products.map(item=>`${skuOf(item)}.pdf`).join(', ')}`);
-  $('stihl-webpage-report').innerHTML=report.map(row=>`<div class="stihl-note">${row}</div>`).join('');
+
+  if(missingImages.length){
+    report.push(`<strong>Missing ImageURL:</strong> ${missingImages.join(', ')}`);
+  }
+
+  if(missingUrls.length){
+    report.push(`<strong>Missing ProductURL (details button hidden):</strong> ${missingUrls.join(', ')}`);
+  }
+
+  if(missingSpecs.length){
+    report.push(`<strong>Missing specifications:</strong> ${missingSpecs.join(', ')}`);
+  }
+
+  report.push(
+    `<strong>Expected price-tag PDFs:</strong> ${
+      products.map(item=>`${skuOf(item)}.pdf`).join(', ')
+    }`
+  );
+
+  $('stihl-webpage-report').innerHTML=
+    report.map(row=>`<div class="stihl-note">${row}</div>`).join('');
+}
+
+function openGeneratedWebpagePreview(){
+  const html=$('stihl-webpage-code')?.value;
+
+  if(!clean(html)){
+    $('stihl-webpage-status').className='stihl-error';
+    $('stihl-webpage-status').textContent=
+      'Generate the webpage before opening the preview.';
+    return;
+  }
+
+  const blob=new Blob(
+    [html],
+    {type:'text/html;charset=utf-8'}
+  );
+
+  const url=URL.createObjectURL(blob);
+
+  const win=window.open(
+    url,
+    '_blank'
+  );
+
+  if(!win){
+    URL.revokeObjectURL(url);
+
+    $('stihl-webpage-status').className='stihl-error';
+    $('stihl-webpage-status').textContent=
+      'Preview tab was blocked. Allow pop-ups for 127.0.0.1 and try again.';
+
+    return;
+  }
+
+  setTimeout(()=>{
+    URL.revokeObjectURL(url);
+  },120000);
 }
 
 async function copyDealerSpikeWebpage(){
@@ -21765,8 +21951,8 @@ function dealerMode(on){
   if(btn){
     btn.textContent =
       on
-        ? "🔓 Dealer Mode Active"
-        : "🔒 Dealer Mode";
+        ? "ðŸ”“ Dealer Mode Active"
+        : "ðŸ”’ Dealer Mode";
 
     btn.classList.toggle(
       "active",
@@ -22687,6 +22873,39 @@ function bindDealerMode(){
   });
   $("stihl-webpage-category")?.addEventListener("change",updateWebpageDefaults);
   $("stihl-generate-webpage")?.addEventListener("click",generateDealerSpikeWebpage);
+  $("stihl-open-webpage-preview")?.addEventListener("click",()=>{
+    const html=$("stihl-webpage-code")?.value;
+
+    if(!clean(html)){
+      $("stihl-webpage-status").className="stihl-error";
+      $("stihl-webpage-status").textContent="Generate the webpage before opening the preview.";
+      return;
+    }
+
+    const blob=new Blob([html],{
+      type:"text/html;charset=utf-8"
+    });
+
+    const url=URL.createObjectURL(blob);
+    const previewWindow=window.open(url,"_blank");
+
+    if(!previewWindow){
+      URL.revokeObjectURL(url);
+      $("stihl-webpage-status").className="stihl-error";
+      $("stihl-webpage-status").textContent="Browser blocked the preview tab. Allow pop-ups for this page and try again.";
+      return;
+    }
+
+    setTimeout(()=>{
+      URL.revokeObjectURL(url);
+    },60000);
+  });
+
+    $("stihl-open-webpage-preview")?.addEventListener(
+    "click",
+    openGeneratedWebpagePreview
+  );
+
   $("stihl-copy-webpage")?.addEventListener("click",copyDealerSpikeWebpage);
   $("stihl-download-webpage")?.addEventListener("click",downloadDealerSpikeWebpage);
   $("stihl-close-webpage")?.addEventListener("click",()=>{$("stihl-webpage-modal").style.display='none';});
@@ -22841,3 +23060,4 @@ if(
   ========================================================== -->
 </body>
 </html>
+

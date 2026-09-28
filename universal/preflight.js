@@ -16,13 +16,16 @@ const indexPath =
 const javascriptFiles = [
   'universal/brand-profile.js',
   'universal/brand-profile-template.js',
+  'universal/brand-profiles.js',
   'universal/brand-profile.test.js',
-  'universal/brand-profile-template.test.js'
+  'universal/brand-profile-template.test.js',
+  'universal/brand-profiles.test.js'
 ];
 
 const testFiles = [
   'universal/brand-profile.test.js',
-  'universal/brand-profile-template.test.js'
+  'universal/brand-profile-template.test.js',
+  'universal/brand-profiles.test.js'
 ];
 
 function runNode(args) {
@@ -65,12 +68,27 @@ const indexHtml =
   fs.readFileSync(indexPath, 'utf8');
 
 const requiredIndexMarkers = [
-  'data-configurator-brand="YANMAR"',
+  'data-configurator-brand="STIHL"',
+  '<script src="universal/brand-profile-template.js"></script>',
+  '<script src="universal/brand-profiles.js"></script>',
   'const ACTIVE_BRAND_ID =',
   'dataProfileApi.getActiveBrandId(document)',
   'dataProfileApi.getDataFiles(',
   'brandApi.validateBrandProfile(',
   'Universal brand-profile service is unavailable.',
+  'https://westendpower-stripe-checkout.westendpower-nm.workers.dev',
+  'https://portal2.apps.stihlusa.com/',
+  'https://www.googletagmanager.com/gtag/js?id=G-B7KTECFBFB',
+  'id="stihl-view-quote"',
+  'function printRuntimeChart(){',
+  'name="equipment-model-search"',
+  'autocomplete="one-time-code"',
+  'data-lpignore="true"',
+  'data-1p-ignore="true"',
+  'rejectSearchAutofill',
+  "searchInput.removeAttribute('readonly');",
+  "searchInput.value = '';",
+  'Print Runtime Chart',
   'fallbackBrandId + \'ATTACHMENT\'',
   'fallbackBrandId + \'ACCESSORY\''
 ];
@@ -129,6 +147,9 @@ pass('brand profile loads before configurator');
 const brandApi =
   require('./brand-profile.js');
 
+const configuredProfiles =
+  require('./brand-profiles.js');
+
 const registryValidation =
   brandApi.validateRegisteredProfiles();
 
@@ -139,16 +160,79 @@ assert.equal(
 );
 
 assert.equal(
-  brandApi.getActiveBrandId(),
-  'YANMAR'
-);
-
-assert.equal(
   brandApi.getBrandProfile('YANMAR')?.role,
   'baseline'
 );
 
-pass('protected Yanmar baseline');
+assert.equal(
+  brandApi.getBrandProfile('STIHL')?.id,
+  'STIHL'
+);
+
+assert.equal(
+  configuredProfiles.STIHL.name,
+  'STIHL'
+);
+
+assert.deepEqual(
+  brandApi
+    .getBrandProfile('STIHL')
+    .freight
+    .ruleIdPrefixes,
+  ['FRT-STIHL']
+);
+
+const stihlProfile =
+  brandApi.getBrandProfile('STIHL');
+
+Object.entries(
+  stihlProfile.data.files
+).forEach(([key, relativePath]) => {
+  const filePath =
+    path.join(projectRoot, relativePath);
+
+  assert.ok(
+    fs.existsSync(filePath),
+    'Missing STIHL data file for ' +
+      key +
+      ': ' +
+      relativePath
+  );
+});
+
+const productHeader =
+  fs.readFileSync(
+    path.join(
+      projectRoot,
+      stihlProfile.data.files.products
+    ),
+    'utf8'
+  )
+    .replace(/^\uFEFF/, '')
+    .split(/\r?\n/, 1)[0];
+
+[
+  'SKU',
+  'Description',
+  'BrandID',
+  'Category',
+  'MSRP',
+  'FreightGroup'
+].forEach((column) => {
+  assert.ok(
+    productHeader
+      .split(',')
+      .includes(column),
+    'STIHL products.csv is missing column: ' +
+      column
+  );
+});
+
+pass('STIHL data files and core columns');
+
+pass(
+  'protected Yanmar baseline and STIHL profile'
+);
 
 console.log(
   '\nUniversal configurator preflight passed.'

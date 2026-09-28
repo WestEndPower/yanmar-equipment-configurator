@@ -1,0 +1,1372 @@
+﻿(function(){
+  'use strict';
+
+  var api = window.WestEndWebCatalog = window.WestEndWebCatalog || {};
+  var MAX_COMPARE = 4;
+  function activeBrandId(){
+    try{
+      if(
+        window.WestEndConfiguratorBrand &&
+        typeof window.WestEndConfiguratorBrand.getActiveBrandId === 'function'
+      ){
+        return String(
+          window.WestEndConfiguratorBrand.getActiveBrandId(document) || 'YANMAR'
+        ).trim().toUpperCase();
+      }
+    }catch(e){}
+
+    return String(
+      document.documentElement.dataset.configuratorBrand || 'YANMAR'
+    ).trim().toUpperCase();
+  }
+
+  function publicConfiguratorBase(){
+    try{
+      if(
+        typeof window.WEBPAGE_PUBLIC_CONFIG_URL !== 'undefined' &&
+        window.WEBPAGE_PUBLIC_CONFIG_URL
+      ){
+        return String(window.WEBPAGE_PUBLIC_CONFIG_URL)
+          .replace(/\/?$/, '/');
+      }
+    }catch(e){}
+
+    var brand = activeBrandId();
+
+    if(brand === 'YANMAR'){
+      return 'https://westendpower.github.io/yanmar-equipment-configurator/';
+    }
+
+    if(brand === 'STIHL'){
+      return 'https://westendpower.github.io/stihl-battery-configurator/';
+    }
+
+    return location.origin +
+      location.pathname.replace(/[^\/]*$/, '');
+  }
+
+  function clean(v){ return String(v == null ? '' : v).trim(); }
+  function money(v){
+    var n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  }
+  function fmtMoney(v){
+    return '$' + (Number(v)||0).toLocaleString('en-US',{
+      minimumFractionDigits:2,
+      maximumFractionDigits:2
+    });
+  }
+  function esc(v){
+    return clean(v)
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#39;');
+  }
+  function norm(v){
+    return clean(v).toUpperCase().replace(/[^A-Z0-9]+/g,'');
+  }
+  function isTrue(v){
+    return ['T','TRUE','Y','YES','1'].indexOf(clean(v).toUpperCase()) >= 0;
+  }
+  function productCodeFromDescription(item){
+    var d = clean(item && item.Description);
+    var m = d.match(/\b([A-Z]{2,4})\s*-?\s*(\d{2,4}(?:\.\d+)?(?:\s*[A-Z])?)\b/i);
+    if(!m) return '';
+    return (m[1].toUpperCase() + ' ' + m[2].toUpperCase().replace(/\s+/g,' ')).trim();
+  }
+  function familyName(item){
+    if(
+      activeBrandId() === 'YANMAR' &&
+      clean(item && item.Category).toLowerCase() === 'compact tractors' &&
+      clean(item && item.Series)
+    ){
+      return clean(item.Series);
+    }
+
+    var model = clean(item && item.Model)
+      .replace(/^M3S\b/i,'MS')
+      .replace(/\s+/g,' ');
+
+    var descCode = productCodeFromDescription(item);
+
+    if(model) return model;
+    if(descCode) return descCode;
+
+    return clean(item && item.Description) ||
+      clean(item && item.SKU) ||
+      'Product';
+  }
+  function familyKey(item){
+    return norm(familyName(item));
+  }
+  function barLabel(item){
+    var d = clean(item && item.Description);
+    var m = d.match(/w\/\s*(\d+(?:\.\d+)?)\s*"/i);
+    if(!m) m = d.match(/\b(\d+(?:\.\d+)?)\s*"\s*(?:bar|guide bar)?/i);
+    return m ? m[1] + '" Bar' : '';
+  }
+  function variantBaseLabel(item){
+    if(
+      activeBrandId() === 'YANMAR' &&
+      clean(item && item.Category).toLowerCase() === 'compact tractors'
+    ){
+      return clean(item && item.Model) ||
+        clean(item && item.SKU) ||
+        'Configuration';
+    }
+
+    var bar = barLabel(item);
+    if(bar) return bar;
+
+    var pt = clean(item && item.ProductType).toLowerCase();
+
+    if(pt === 'kit') return 'Package';
+    if(pt === 'tool') return 'Tool Only';
+
+    return clean(item && item.ProductType) || 'Standard';
+  }
+  function currentPrice(item){
+    try{
+      if(typeof window.webpagePromotionData === 'function'){
+        var p = window.webpagePromotionData(item);
+        if(p && Number.isFinite(Number(p.currentPrice))) return Number(p.currentPrice);
+      }
+    }catch(e){}
+    var sale = money(item && item.SalePrice);
+    return sale > 0 ? sale : money(item && item.MSRP);
+  }
+  function inStock(item){
+    try{
+      if(typeof window.webpageInventoryQuantity === 'function'){
+        return Math.max(0, Number(window.webpageInventoryQuantity(item)) || 0);
+      }
+    }catch(e){}
+    return 0;
+  }
+  function normalStockLocations(item){
+    var locations=[];
+    if((Number(item && item.QtyDanbury)||0)>0) locations.push('Danbury');
+    if((Number(item && item.QtyNewMilford)||0)>0) locations.push('New Milford');
+    return locations;
+  }
+  function onOrder(item){
+    try{
+      if(typeof window.webpageOnOrderQuantity === 'function'){
+        return Math.max(0, Number(window.webpageOnOrderQuantity(item)) || 0);
+      }
+    }catch(e){}
+    return 0;
+  }
+  function itemImage(item){
+    try{
+      if(typeof window.imageOf === 'function') return clean(window.imageOf(item));
+    }catch(e){}
+    return clean(item && item.ImageURL);
+  }
+  function absoluteImage(raw){
+    raw=clean(raw);
+    if(!raw) return '';
+    if(/^https?:\/\//i.test(raw)) return raw;
+    raw=raw.replace(/^\.?\//,'').replace(/^images\/products\//i,'images/Products/');
+    return publicConfiguratorBase() + raw;
+  }
+  function configureUrl(item,category){
+    var sku=clean(item && item.SKU);
+    var base=publicConfiguratorBase();
+    try{
+      if(typeof window.WEBPAGE_PUBLIC_CONFIG_URL !== 'undefined' && window.WEBPAGE_PUBLIC_CONFIG_URL){
+        base=window.WEBPAGE_PUBLIC_CONFIG_URL;
+      }
+    }catch(e){}
+    return base + '?category=' + encodeURIComponent(category) + '&sku=' + encodeURIComponent(sku);
+  }
+  function priceUrl(item){
+    var sku=clean(item && item.SKU);
+    var base=publicConfiguratorBase();
+    try{
+      if(typeof window.WEBPAGE_PUBLIC_CONFIG_URL !== 'undefined' && window.WEBPAGE_PUBLIC_CONFIG_URL){
+        base=window.WEBPAGE_PUBLIC_CONFIG_URL;
+      }
+    }catch(e){}
+    return base + 'price-tags/' + encodeURIComponent(sku) + '.pdf';
+  }
+  function activeList(list){
+    return (list||[]).filter(function(x){ return !clean(x.Active) || isTrue(x.Active); });
+  }
+  function splitSystems(v){
+    return clean(v).split(/[|,;/]+/).map(function(x){return clean(x).toUpperCase();}).filter(Boolean);
+  }
+  function compatibleBySystem(productSystem, optionSystem){
+    var ps=splitSystems(productSystem);
+    var os=splitSystems(optionSystem);
+    if(!ps.length || !os.length) return false;
+    return ps.some(function(x){ return os.indexOf(x)>=0; });
+  }
+  function groupProducts(items){
+    var map=new Map();
+    (items||[]).forEach(function(item){
+      var key=familyKey(item);
+      if(!map.has(key)){
+        map.set(key,{
+          key:key,
+          name:familyName(item),
+          category:clean(item.Category),
+          subcategory:clean(item.SubCategory),
+          power:clean(item.PowerType),
+          system:clean(item.System),
+          series:clean(item.Series) ||
+            (/^(AS|AK|AP|AR)$/i.test(clean(item.System))
+              ? clean(item.System).toUpperCase()
+              : ''),
+          items:[],
+          image:'',
+          stock:0,
+          order:0,
+          normalLocations:new Set(),
+          minPrice:Infinity
+        });
+      }
+      var f=map.get(key);
+      f.items.push(item);
+      f.stock += inStock(item);
+      f.order += onOrder(item);
+      normalStockLocations(item).forEach(function(location){f.normalLocations.add(location);});
+      f.minPrice = Math.min(f.minPrice,currentPrice(item) || Infinity);
+      if(!f.image){
+        var img=itemImage(item);
+        if(img) f.image=absoluteImage(img);
+      }
+      if(!f.system && clean(item.System)) f.system=clean(item.System);
+      if(!f.power && clean(item.PowerType)) f.power=clean(item.PowerType);
+      if(!f.subcategory && clean(item.SubCategory)) f.subcategory=clean(item.SubCategory);
+    });
+    map.forEach(function(f){
+      var used={};
+      f.items.forEach(function(item){
+        var base=variantBaseLabel(item);
+        used[base]=(used[base]||0)+1;
+      });
+      var seen={};
+      f.variants=f.items.map(function(item){
+        var base=variantBaseLabel(item);
+        seen[base]=(seen[base]||0)+1;
+        var label=base;
+        if(used[base]>1){
+          label=base + ' &middot; ' + clean(item.SKU);
+        }
+        return {
+          sku:clean(item.SKU),
+          label:label,
+          description:clean(item.Description),
+          price:currentPrice(item),
+          msrp:money(item.MSRP),
+          salePrice:money(item.SalePrice),
+          saleStart:clean(item.SaleStartDate),
+          saleEnd:clean(item.SaleEndDate),
+          stock:inStock(item),
+          order:onOrder(item),
+          system:clean(item.System)||f.system,
+          configure:configureUrl(item,f.category),
+          priceUrl:priceUrl(item),
+          details:clean(item.ProductURL),
+          specs:extractSpecs(item),
+          productType:clean(item.ProductType),
+          shipping:(clean(item.SKU)==='GA01 011 6911 US' && isTrue(item.ShippingEligible) &&
+            [item.ShipWeight,item.ShipLength,item.ShipWidth,item.ShipHeight].every(function(x){return Number(x)>0;}))
+            ? {weight:Number(item.ShipWeight),length:Number(item.ShipLength),width:Number(item.ShipWidth),height:Number(item.ShipHeight)} : null,
+          isKit:clean(item.ProductType).toLowerCase()==='kit',
+          kitIncludes:clean(item.ProductType).toLowerCase()==='kit' ? kitIncludes(item) : ''
+        };
+      });
+      f.items.sort(function(a,b){
+        return (Number(a.SortOrder)||99999)-(Number(b.SortOrder)||99999);
+      });
+      if(!Number.isFinite(f.minPrice)) f.minPrice=0;
+      f.normalLocations=Array.from(f.normalLocations);
+      f.specs=extractSpecs(f.items[0]||{});
+    });
+    var powerRank={ELECTRIC:1,BATTERY:2,GAS:3};
+    return Array.from(map.values()).sort(function(a,b){
+      var pa=powerRank[clean(a.power).toUpperCase()]||99;
+      var pb=powerRank[clean(b.power).toUpperCase()]||99;
+      return pa-pb ||
+        a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'});
+    });
+  }
+  function kitIncludes(item){
+    var d=clean(item && item.Description);
+    var bits=[];
+    var batt=d.match(/\b((?:AS|AK|AP|AR)\s*\d+(?:\.\d+)?\s*[A-Z]?)\b/i);
+    var charger=d.match(/\b(AL\s*\d+(?:-\d+)?)\b/i);
+    if(batt) bits.push(batt[1].replace(/\s+/g,' ').trim().toUpperCase()+' battery');
+    if(charger) bits.push(charger[1].replace(/\s+/g,'').toUpperCase()+' charger');
+    return bits.join(' + ');
+  }
+  function extractSpecs(item){
+    var out={};
+    for(var i=1;i<=10;i++){
+      var label=clean(item && item['SpecLabel'+i]);
+      var value=clean(item && item['SpecValue'+i]);
+      if(label && value) out[label]=value;
+    }
+    if(clean(item && item.Weight)) out.Weight=clean(item.Weight)+' '+clean(item.WeightUnit);
+    return out;
+  }
+  function optionPayload(x,type){
+    var label=clean(x.Model)||clean(x.BatteryID)||clean(x.ChargerName)||clean(x.ChargerID)||clean(x.Description)||clean(x.SKU);
+    var system=clean(x.System);
+    if(type==='battery'){
+      var batteryId=clean(x.BatteryID)||clean(x.Model)||clean(x.Description);
+      var match=batteryId.match(/\b(AS|AK|AP|AR)\b/i) || batteryId.match(/^\s*(AS|AK|AP|AR)/i);
+      if(match) system=match[1].toUpperCase();
+    }
+    return {
+      type:type,
+      sku:clean(x.SKU),
+      stihlId:clean(x.StihlID),
+      label:label,
+      description:clean(x.Description),
+      model:clean(x.Model),
+      batteryId:clean(x.BatteryID),
+      chargerId:clean(x.ChargerID),
+      chargerName:clean(x.ChargerName),
+      price:money(x.SalePrice)>0?money(x.SalePrice):money(x.MSRP),
+      system:system
+    };
+  }
+  function compactComponentName(value){
+    var text=clean(value);
+
+    text=text.replace(
+      /\b(AS|AK|AP|AR)\s+(\d+(?:\.\d+)?)\s*([A-Z]?)\b/gi,
+      function(match,prefix,number,suffix){
+        return prefix.toUpperCase()+number+(suffix||'').toUpperCase();
+      }
+    );
+
+    text=text.replace(
+      /\b(AL)\s+(\d+(?:-\d+)?)\b/gi,
+      function(match,prefix,number){
+        return prefix.toUpperCase()+number;
+      }
+    );
+
+    return text;
+  }
+
+  function packageItemName(item){
+    if(!item) return '';
+
+    var battery=clean(item.BatteryID);
+
+    if(battery){
+      var bm=clean(item.Model)||battery;
+      bm=bm.replace(/\.0(?=[A-Z]|\s|$)/g,'');
+      return compactComponentName(bm)+' Battery';
+    }
+
+    var charger=clean(item.ChargerID);
+
+    if(charger){
+      return compactComponentName(charger)+' Charger';
+    }
+
+    return compactComponentName(
+      clean(item.Model || item.ChargerName || item.Description || item.SKU)
+    );
+  }
+  function buildComponentLookups(liveState){
+    var batteries=activeList((liveState && liveState.batteries)||[]);
+    var chargers=activeList((liveState && liveState.chargers)||[]);
+    return {
+      batteryBySku:new Map(batteries.flatMap(function(x){
+        return [
+          [norm(x.StihlID||x.SKU),x],
+          [norm(x.SKU),x]
+        ];
+      })),
+      chargerBySku:new Map(chargers.flatMap(function(x){
+        return [
+          [norm(x.StihlID||x.SKU),x],
+          [norm(x.SKU),x]
+        ];
+      })),
+      batteryById:new Map(batteries.map(function(x){return [norm(x.BatteryID||x.Model),x];})),
+      chargerById:new Map(chargers.map(function(x){return [norm(x.ChargerID||x.Model),x];}))
+    };
+  }
+  function enrichPackageVariants(families,liveState){
+    var packages=(liveState && liveState.packages)||[];
+    var compatibility=(liveState && liveState.compatibility)||[];
+    var lookups=buildComponentLookups(liveState);
+    var pools=[
+      ...((liveState && liveState.batteries)||[]),
+      ...((liveState && liveState.chargers)||[]),
+      ...((liveState && liveState.attachments)||[]),
+      ...((liveState && liveState.accessories)||[]),
+      ...((liveState && liveState.parts)||[])
+    ];
+    var bySku=new Map(pools.flatMap(function(item){
+      return [
+        [norm(item.StihlID||item.SKU),item],
+        [norm(item.SKU),item]
+      ];
+    }));
+    var packageByParent=new Map(packages.map(function(row){return [norm(row.ParentSKU),row];}));
+    var compatByTool=new Map();
+    compatibility.forEach(function(row){
+      if(clean(row.Active) && !isTrue(row.Active)) return;
+      var key=norm(row.ToolSKU);
+      if(!key || !clean(row.RecommendedBatteryID1) || !clean(row.RecommendedChargerID1)) return;
+      if(!compatByTool.has(key) || !clean(row.AttachmentSKU)) compatByTool.set(key,row);
+    });
+
+    families.forEach(function(family){
+      var toolVariant=family.variants.find(function(v){return !v.isKit;});
+      family.variants.forEach(function(v){
+        if(!v.isKit) return;
+        var row=packageByParent.get(norm(v.sku));
+        if(!row) return;
+
+        var included=[];
+        var componentTotal=0;
+        [
+          ['Battery',3],
+          ['Charger',3],
+          ['Attachment',3],
+          ['Accessory',3],
+          ['Part',3]
+        ].forEach(function(def){
+          var prefix=def[0],max=def[1];
+          for(var i=1;i<=max;i++){
+            var componentSku=clean(row[prefix+'SKU'+i]);
+            var qty=Math.max(0,Number(clean(row[prefix+'Qty'+i]))||0);
+            if(!componentSku || qty<=0) continue;
+            var item=bySku.get(norm(componentSku));
+            if(!item && prefix==='Battery') item=lookups.batteryBySku.get(norm(componentSku))||null;
+            if(!item && prefix==='Charger') item=lookups.chargerBySku.get(norm(componentSku))||null;
+            var name=item ? packageItemName(item) : componentSku;
+            var price=item ? currentPrice(item) : 0;
+            included.push({type:prefix,sku:componentSku,qty:qty,name:name,price:price});
+            componentTotal+=price*qty;
+          }
+        });
+
+        v.packageItems=included;
+        v.packageIncludes=included.map(function(x){
+          return (x.qty>1 ? x.qty+' x ' : '')+x.name;
+        }).join(' + ');
+        var separateBase=(toolVariant ? Number(toolVariant.price||0) : 0)+componentTotal;
+        v.separatePrice=separateBase;
+        v.packageSavings=Number(v.price||0)>0 ? Math.max(0,separateBase-Number(v.price||0)) : 0;
+      });
+
+      if(toolVariant && clean(family.power).toUpperCase()==='BATTERY' && !family.variants.some(function(v){return v.isKit;})){
+        var compat=compatByTool.get(norm(toolVariant.sku));
+        var source=family.items.find(function(x){return norm(x.SKU)===norm(toolVariant.sku);})||{};
+        var batteryId=clean((compat && compat.RecommendedBatteryID1)||source.RecommendedBatteryID1||source.RecommendedBattery);
+        var chargerId=clean((compat && compat.RecommendedChargerID1)||source.RecommendedChargerID1||source.StandardCharger);
+        if(batteryId && chargerId){
+          var batteryQty=Math.max(1,Number(clean(compat && compat.RecommendedBatteryQty1))||1);
+          var chargerQty=Math.max(1,Number(clean(compat && compat.RecommendedChargerQty1))||1);
+          var battery=lookups.batteryById.get(norm(batteryId))||null;
+          var charger=lookups.chargerById.get(norm(chargerId))||null;
+          if(battery && charger && currentPrice(battery)>0 && currentPrice(charger)>0){
+            var items=[];
+            var toolPrice=Number(toolVariant.price||0);
+            var recommendedPriced=toolPrice>0;
+            var total=recommendedPriced?toolPrice:0;
+            if(battery){
+              var bp=currentPrice(battery);
+              items.push({type:'Battery',sku:clean(battery.SKU),qty:batteryQty,name:packageItemName(battery),price:bp});
+              if(recommendedPriced) total+=bp*batteryQty;
+            }
+            if(charger){
+              var cp=currentPrice(charger);
+              items.push({type:'Charger',sku:clean(charger.SKU),qty:chargerQty,name:packageItemName(charger),price:cp});
+              if(recommendedPriced) total+=cp*chargerQty;
+            }
+            family.recommendedPackage={
+              price:total,
+              includes:items.map(function(x){return (x.qty>1?x.qty+' x ':'')+x.name;}).join(' + ')
+            };
+            family.variants.push({
+              sku:toolVariant.sku,label:'Package',description:toolVariant.description,
+              price:total,system:toolVariant.system,configure:toolVariant.configure,
+              details:toolVariant.details,
+              isKit:false,isRecommendedPackage:true,packageItems:items,
+              packageIncludes:family.recommendedPackage.includes
+            });
+          }
+        }
+      }
+    });
+    return families;
+  }
+  function pageData(products){
+    var families=groupProducts(products);
+    var liveState=window.WestEndConfiguratorState || ((typeof state!=='undefined' && state) ? state : null);
+    enrichPackageVariants(families,liveState);
+    var batteries=activeList(liveState && liveState.batteries)
+      .map(function(x){return optionPayload(x,'battery');})
+      .filter(function(x){return x.price>0;});
+    var chargers=activeList(liveState && liveState.chargers)
+      .map(function(x){return optionPayload(x,'charger');})
+      .filter(function(x){return x.price>0;});
+    var webstoreProducts=activeList(liveState && liveState.webstoreProducts)
+      .map(function(x){
+        return {
+          sku:clean(x.SKU),
+          alternateId:clean(x.AlternateID),
+          privateProductId:clean(x.PrivateProductID),
+          webstoreProductId:Number(x.WebstoreProductID)||0,
+          checkoutQuantity:Number(x.CheckoutQuantity)||0
+        };
+      })
+      .filter(function(x){return x.webstoreProductId>0;});
+    return {families:families,batteries:batteries,chargers:chargers,webstoreProducts:webstoreProducts};
+  }
+  function selectOptions(list,selected){
+    return list.map(function(x){
+      return '<option value="'+esc(x.sku)+'"'+(x.sku===selected?' selected':'')+'>'+esc(x.label)+' &mdash; $'+x.price.toFixed(2)+'</option>';
+    }).join('');
+  }
+  function stockText(f){
+    if(f.stock>0 && f.order>0) return '&#10003; In Stock: '+f.stock+' available &middot; On Order: '+f.order;
+    if(f.stock>0) return '&#10003; In Stock: '+f.stock+' available';
+    if(f.order>0) return 'On Order: '+f.order+' incoming';
+    if(f.normalLocations && f.normalLocations.length){
+      return 'Normally Stocked in '+f.normalLocations.join(' and ');
+    }
+    return 'Available to Order';
+  }
+  function stockNote(f){
+    if(f.stock>0) return 'In Stock';
+    if(f.order>0) return 'On Order';
+    return '';
+  }
+  function saleInfo(v){
+    if(!v) return null;
+    var regular=Number(v.msrp||0);
+    var sale=Number(v.salePrice||0);
+    if(!(regular>0 && sale>0 && sale<regular)) return null;
+    var now=new Date();
+    function parse(raw,endOfDay){
+      raw=clean(raw);
+      if(!raw) return null;
+      var p=raw.split('-').map(Number);
+      if(p.length!==3) return null;
+      return new Date(p[0],p[1]-1,p[2],endOfDay?23:0,endOfDay?59:0,endOfDay?59:0);
+    }
+    var start=parse(v.saleStart,false);
+    var end=parse(v.saleEnd,true);
+    if(start && now<start) return null;
+    if(end && now>end) return null;
+    return {regular:regular,sale:sale,savings:regular-sale,end:v.saleEnd};
+  }
+  function shortDate(raw){
+    raw=clean(raw);
+    if(!raw) return '';
+    var p=raw.split('-').map(Number);
+    if(p.length!==3) return raw;
+    return new Date(p[0],p[1]-1,p[2]).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  }
+  function includedSummary(variant){
+    var components=(variant && variant.packageItems)||[];
+
+    var names=components.map(function(item){
+      var qty=Math.max(1,Number(item.qty)||1);
+      var name=compactComponentName(clean(item.name||item.sku));
+
+      if(qty>1){
+        name=name
+          .replace(/\bBattery$/i,'Batteries')
+          .replace(/\bCharger$/i,'Chargers');
+      }
+
+      return (qty>1?qty+' ':'')+name;
+    });
+
+    if(!names.length){
+      names=clean(
+        variant && (variant.packageIncludes||variant.kitIncludes)
+      )
+        .split(/\s*\+\s*/)
+        .filter(Boolean)
+        .map(compactComponentName);
+    }
+
+    if(!names.length) return '';
+
+    return names.length===1
+      ? names[0]+' included'
+      : names.slice(0,-1).join(', ')+' and '+names[names.length-1]+' included';
+  }
+  function priceRow(label,variant,sale){
+    var price=Number(variant && variant.price || 0);
+    var priced=price>0;
+    var priceHtml='';
+
+    if(!priced){
+      priceHtml=
+        '<strong class="wep-price-coming-soon">Pricing Coming Soon</strong>';
+    }
+    else if(sale){
+      priceHtml=
+        '<del>'+fmtMoney(sale.regular)+'</del>'+
+        '<strong>'+fmtMoney(sale.sale)+'</strong>';
+    }
+    else{
+      priceHtml=
+        '<strong>'+fmtMoney(price)+'</strong>';
+    }
+
+    return '<div class="wep-price-heading">'+
+      '<span class="wep-price-label">'+esc(label)+'</span>'+
+      '<span class="wep-price-pair">'+priceHtml+'</span>'+
+    '</div>';
+  }
+  function renderFamilyPrices(f){
+    var isYanmarTractor =
+      activeBrandId()==='YANMAR' &&
+      clean(f.category).toLowerCase()==='compact tractors';
+
+    if(isYanmarTractor){
+      return '<div class="wep-price-lines">'+
+        '<div class="wep-price-choice">'+
+          '<div class="wep-price-heading">'+
+            '<span class="wep-price-label">Starting Price</span>'+
+            '<span class="wep-price-pair"><strong>'+
+              (
+                Number(f.minPrice||0)>0
+                  ? fmtMoney(f.minPrice)
+                  : 'Pricing Coming Soon'
+              )+
+            '</strong></span>'+
+          '</div>'+
+        '</div>'+
+      '</div>';
+    }
+
+    var tool=f.variants.find(function(v){
+      return !v.isKit && !v.isRecommendedPackage;
+    });
+
+    var kit=f.variants.find(function(v){
+      return v.isKit;
+    });
+
+    var out='<div class="wep-price-lines">';
+
+    if(tool){
+      var toolSale=Number(tool.price||0)>0
+        ? saleInfo(tool)
+        : null;
+
+      out+='<div class="wep-price-choice wep-tool-choice">'+
+        priceRow('Tool Only',tool,toolSale);
+
+      if(clean(f.power).toUpperCase()==='BATTERY'){
+        out+='<small class="wep-includes">Battery and charger sold separately</small>';
+      }
+
+      out+='</div>';
+    }
+
+    if(kit){
+      var kitPriced=Number(kit.price||0)>0;
+      var kitSale=kitPriced ? saleInfo(kit) : null;
+
+      out+='<div class="wep-price-choice wep-kit-choice">'+
+        priceRow('Package',kit,kitSale);
+
+      var kitContents=includedSummary(kit);
+
+      if(kitContents){
+        out+='<small class="wep-includes">'+
+          esc(kitContents)+
+          '</small>';
+      }
+
+      if(
+        kitPriced &&
+        Number(kit.packageSavings||0)>0 &&
+        Number(kit.separatePrice||0)>0
+      ){
+        out+='<small class="wep-package-value">'+
+          'Package value '+fmtMoney(kit.separatePrice||0)+
+          ' <span aria-hidden="true">&middot;</span> '+
+          '<strong class="wep-save">Save '+
+          fmtMoney(kit.packageSavings)+
+          '</strong></small>';
+      }else{
+        out+='<small class="wep-package-value wep-package-spacer">&nbsp;</small>';
+      }
+
+      out+='</div>';
+    }
+    else if(f.recommendedPackage){
+      var recommended=f.variants.find(function(v){
+        return v.isRecommendedPackage;
+      })||f.recommendedPackage;
+
+      out+='<div class="wep-price-choice wep-kit-choice">'+
+        priceRow('Package',recommended,null);
+
+      var recommendedContents=includedSummary(recommended);
+
+      if(recommendedContents){
+        out+='<small class="wep-includes">'+
+          esc(recommendedContents)+
+          '</small>';
+      }
+
+      out+='<small class="wep-package-value wep-package-spacer">&nbsp;</small>';
+      out+='</div>';
+    }
+
+    if(!tool && !kit && !f.recommendedPackage){
+      out+='<p><span>Starting at</span><strong>'+
+        (
+          Number(f.minPrice||0)>0
+            ? fmtMoney(f.minPrice)
+            : 'Pricing Coming Soon'
+        )+
+        '</strong></p>';
+    }
+
+    return out+'</div>';
+  }
+  function renderInitialOptions(f,data){
+    var first=f.variants[0]||{};
+    if(first.isKit){
+      return first.kitIncludes
+        ? '<div class="wep-kit-includes"><strong>Factory kit includes:</strong> '+esc(first.kitIncludes)+'</div>'
+        : '';
+    }
+    var batteries=(data.batteries||[]).filter(function(x){return compatibleBySystem(first.system,x.system);});
+    var chargers=(data.chargers||[]).filter(function(x){return compatibleBySystem(first.system,x.system);});
+    if(!batteries.length && !chargers.length) return '';
+    return '<div class="wep-smart-option-row">'+
+      (batteries.length
+        ? '<label>Battery<select data-battery="'+esc(f.key)+'"><option value="">No added battery</option>'+selectOptions(batteries,'')+'</select></label>'
+        : '')+
+      (chargers.length
+        ? '<label>Charger<select data-charger="'+esc(f.key)+'"><option value="">No added charger</option>'+selectOptions(chargers,'')+'</select></label>'
+        : '')+
+      '</div>';
+  }
+  function specIcon(label){
+    var key=clean(label).toLowerCase();
+
+    if(key==='weight'){
+      return '<svg viewBox="0 0 48 48" aria-hidden="true">'+
+        '<path d="M17 14h14l5 25H12l5-25zm4-5a3 3 0 1 1 6 0 3 3 0 0 1-6 0z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>'+
+      '</svg>';
+    }
+
+    if(key==='max. air velocity'){
+      return '<svg viewBox="0 0 48 48" aria-hidden="true">'+
+        '<path d="M5 16h22c5 0 7-8 1-10-4-1-6 2-6 4M5 24h31c7 0 8-10 2-12M5 32h22c5 0 7 8 1 10-4 1-6-2-6-4" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>'+
+      '</svg>';
+    }
+
+    if(key==='air volume'){
+      return '<svg viewBox="0 0 48 48" aria-hidden="true">'+
+        '<path d="M24 7c5 0 6 8 3 13 5-3 13-2 13 3s-8 6-13 3c3 5 2 13-3 13s-6-8-3-13c-5 3-13 2-13-3s8-6 13-3c-3-5-2-13 3-13z" fill="currentColor"/>'+
+      '</svg>';
+    }
+
+    if(key==='blowing force'){
+      return '<svg viewBox="0 0 48 48" aria-hidden="true">'+
+        '<path d="M15 38c-5-4-6-12-1-17l5-5v-5c0-4 6-4 6 0v7l4-3c4-3 7 2 4 5l-3 3 5-1c4-1 6 5 2 7l-7 3c-4 2-5 8-15 6z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>'+
+      '</svg>';
+    }
+
+    return '';
+  }
+
+  function renderCardSpecs(f){
+    var wanted=clean(f.category).toLowerCase()==='blowers'
+      ? ['Weight','Max. Air Velocity','Air Volume','Blowing Force']
+      : [];
+
+    var values=f.specs||{};
+
+    var items=wanted.map(function(label){
+      var value=clean(values[label]);
+
+      if(!value && label==='Weight'){
+        value=clean(values.Weight);
+      }
+
+      if(!value) return '';
+
+      return '<div class="wep-spec-tile">'+
+        '<span class="wep-spec-copy">'+
+          '<span class="wep-spec-label">'+esc(label)+'</span>'+
+          '<strong>'+esc(value)+'</strong>'+
+        '</span>'+
+      '</div>';
+    }).filter(Boolean).slice(0,4);
+
+    return items.length
+      ? '<div class="wep-spec-strip">'+items.join('')+'</div>'
+      : '';
+  }
+  function renderImagePromo(f){
+    var saleVariant=(f.variants||[])
+      .map(function(v){
+        return {
+          v:v,
+          s:Number(v.price||0)>0 ? saleInfo(v) : null
+        };
+      })
+      .find(function(x){
+        return x.s;
+      });
+
+    if(!saleVariant) return '';
+
+    var sale=saleVariant.s;
+
+    var date=sale.end
+      ? shortDate(sale.end).replace(
+          /^([A-Za-z]{3}) /,
+          '$1. '
+        )
+      : '';
+
+    var savings=fmtMoney(sale.savings)
+      .replace(/\.00$/,'');
+
+    return '<div class="wep-promo-ribbon">'+
+      '<span class="wep-ribbon-tail wep-ribbon-left"></span>'+
+      '<span class="wep-ribbon-center">'+
+        '<strong>'+esc(savings)+' Savings</strong>'+
+        (date ? '<small>thru '+esc(date)+'</small>' : '')+
+      '</span>'+
+      '<span class="wep-ribbon-tail wep-ribbon-right"></span>'+
+    '</div>';
+  }
+  function renderFamilyCard(f,data){
+    var first=f.variants[0]||{};
+    var specsHtml=renderCardSpecs(f);
+
+    var isYanmarTractor =
+      activeBrandId()==='YANMAR' &&
+      clean(f.category).toLowerCase()==='compact tractors';
+
+    var description=[f.power,f.subcategory]
+      .filter(Boolean)
+      .map(esc)
+      .join(' - ');
+
+    var image=f.image
+      ? '<img src="'+esc(f.image)+'" alt="'+esc(f.name)+'" loading="lazy">'
+      : '<div class="wep-smart-placeholder">Image Coming Soon</div>';
+
+    var variantOptions=
+      '<option value="" selected disabled>'+
+        (isYanmarTractor ? 'Choose Configuration' : 'Choose Purchase Option')+
+      '</option>'+
+      f.variants.map(function(v,i){
+        return '<option value="'+i+'">'+esc(v.label)+'</option>';
+      }).join('');
+
+    var cartIcon=
+      '<svg viewBox="0 0 24 24" aria-hidden="true">'+
+        '<path d="M3 4h2l2.2 10.2a2 2 0 0 0 2 1.6h7.6a2 2 0 0 0 2-1.6L20 8H7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'+
+        '<circle cx="10" cy="19" r="1.5" fill="currentColor"/>'+
+        '<circle cx="17" cy="19" r="1.5" fill="currentColor"/>'+
+      '</svg>';
+
+    return '<article class="wep-smart-card" '+
+      'data-family="'+esc(f.key)+'" '+
+      'data-type="'+esc(f.subcategory)+'" '+
+      'data-power="'+esc(f.power)+'" '+
+      'data-series="'+esc(f.series)+'" '+
+      'data-stock="'+(f.stock>0?'1':'0')+'" '+
+      'data-order="'+(f.order>0?'1':'0')+'">'+
+
+      '<header class="wep-card-header">'+
+        '<h3 class="wep-model-heading">'+
+          '<strong>'+esc(f.name)+'</strong>'+
+          (description ? '<span>'+description+'</span>' : '')+
+        '</h3>'+
+
+        '<label class="wep-compare-pick">'+
+          '<input type="checkbox" data-compare="'+esc(f.key)+'">'+
+          '<span>Compare</span>'+
+        '</label>'+
+      '</header>'+
+
+      '<div class="wep-card-main">'+
+
+        '<section class="wep-card-left">'+
+          '<div class="wep-smart-media">'+
+            renderImagePromo(f)+
+            '<a class="wep-image-link" '+
+              'data-product-link="'+esc(f.key)+'"'+
+              (
+                first.details && /^https?:\/\//i.test(first.details)
+                  ? ' href="'+esc(first.details)+'" data-wep-external="1"'
+                  : ''
+              )+
+              ' target="_blank" rel="noopener noreferrer">'+
+              image+
+            '</a>'+
+          '</div>'+
+          (
+            first.details && /^https?:\/\//i.test(first.details)
+              ? '<a class="wep-external-details" href="'+esc(first.details)+'" '+
+                'data-product-details="'+esc(f.key)+'" data-wep-external="1" '+
+                'target="_blank" rel="noopener noreferrer">'+
+                'View Product Details <span aria-hidden="true">&nearr;</span></a>'
+              : ''
+          )+
+        '</section>'+
+
+        '<section class="wep-card-buy">'+
+
+          renderFamilyPrices(f)+
+
+          '<div class="wep-config-row">'+
+            '<select aria-label="'+
+              (isYanmarTractor ? 'Choose Configuration' : 'Choose Purchase Option')+
+              '" class="wep-variant" data-family="'+esc(f.key)+'">'+
+              variantOptions+
+            '</select>'+
+            (
+              isYanmarTractor
+                ? ''
+                : '<input aria-label="Quantity" class="wep-main-qty" type="number" min="1" max="99" value="1" data-main-qty="'+esc(f.key)+'">'
+            )+
+          '</div>'+
+
+          (
+            isYanmarTractor
+              ? '<div class="wep-smart-actions wep-two-actions">'+
+                  '<a href="'+esc(first.configure||'#')+'" '+
+                    'data-runtime="'+esc(f.key)+'">'+
+                    'Build &amp; Price'+
+                  '</a>'+
+                '</div>'
+              : '<div class="wep-smart-actions'+
+                  (clean(f.power).toUpperCase()==='BATTERY'
+                    ? ''
+                    : ' wep-two-actions')+
+                '">'+
+
+                  '<a href="product-options.html?sku='+
+                    encodeURIComponent(first.sku)+
+                    '&category='+
+                    encodeURIComponent(f.category)+
+                    '" data-options="'+esc(f.key)+'">'+
+                    'View Options'+
+                  '</a>'+
+
+                  (
+                    clean(f.power).toUpperCase()==='BATTERY'
+                      ? '<a href="'+esc(first.configure||'#')+'" '+
+                        'data-runtime="'+esc(f.key)+'">'+
+                        'Run/Charge Times'+
+                        '</a>'
+                      : ''
+                  )+
+
+                  '<button class="wep-add-cart" type="button" '+
+                    'data-add-cart="'+esc(f.key)+'">'+
+                    cartIcon+
+                    '<span>Add to Cart</span>'+
+                  '</button>'+
+                '</div>'
+          )+
+
+        '</section>'+
+
+      '</div>'+
+
+      specsHtml+
+
+    '</article>';
+  }
+  function distinct(arr){
+    return Array.from(new Set(arr.filter(Boolean))).sort(function(a,b){return a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'});});
+  }
+  function sortPowerTypes(values){
+    var rank={ELECTRIC:1,BATTERY:2,GAS:3};
+    return values.sort(function(a,b){
+      var ra=rank[clean(a).toUpperCase()]||99;
+      var rb=rank[clean(b).toUpperCase()]||99;
+      return ra-rb || a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'});
+    });
+  }
+  function accessoryMarkup(data,category){
+    var match=/^(AS|AK|AP|AR) Battery System$/i.exec(clean(category));
+    if(!match) return '';
+    var system=match[1].toUpperCase();
+    function compatible(items){
+      return (items||[]).filter(function(item){
+        return clean(item.system).toUpperCase().split(/[|,;/]+/).map(function(x){return x.trim();}).indexOf(system)>=0;
+      }).slice().sort(function(a,b){
+        return clean(a.label).localeCompare(clean(b.label),undefined,{numeric:true,sensitivity:'base'});
+      });
+    }
+    function panel(kind,items){
+      return '<section class="wep-accessory-panel" data-accessory-panel="'+kind+'" hidden>'+
+        '<h3>'+system+' '+(kind==='batteries'?'Batteries':'Chargers')+'</h3>'+
+        '<p>Compatible with the '+system+' battery system. Contact West End Power to confirm availability.</p>'+
+        '<div class="wep-accessory-grid">'+items.map(function(item){
+          return '<article class="wep-accessory-card" data-component-sku="'+esc(item.sku)+'"><h4>'+esc(item.label)+'</h4>'+
+            '<strong>'+Number(item.price||0).toLocaleString('en-US',{style:'currency',currency:'USD'})+'</strong>'+
+            '<div class="wep-component-buy"><label>Qty <input type="number" min="1" max="99" value="1" data-component-qty="'+esc(item.sku)+'"></label>'+
+            '<button type="button" data-component-cart="'+esc(item.sku)+'">Add to Cart</button></div>'+
+            '<small class="wep-component-note">Product availability will be confirmed before your order is processed.</small></article>';
+        }).join('')+'</div></section>';
+    }
+    return '<nav class="wep-accessory-nav" aria-label="Browse '+system+' battery system">'+
+      '<button type="button" data-shop-view="tools" aria-pressed="true">Equipment</button>'+
+      '<button type="button" data-shop-view="batteries" aria-pressed="false">Batteries</button>'+
+      '<button type="button" data-shop-view="chargers" aria-pressed="false">Chargers</button></nav>'+
+      panel('batteries',compatible(data.batteries))+panel('chargers',compatible(data.chargers));
+  }
+  function accessoryScript(){
+    return '<script>(function(){var root=document.getElementById("wep-smart-catalog");if(!root)return;'+
+      'var buttons=root.querySelectorAll("[data-shop-view]"),panels=root.querySelectorAll("[data-accessory-panel]");'+
+      'Array.prototype.forEach.call(buttons,function(button){button.addEventListener("click",function(){var view=button.getAttribute("data-shop-view");'+
+      'root.classList.toggle("wep-show-accessories",view!=="tools");'+
+      'Array.prototype.forEach.call(buttons,function(b){b.setAttribute("aria-pressed",String(b===button))});'+
+      'Array.prototype.forEach.call(panels,function(p){p.hidden=p.getAttribute("data-accessory-panel")!==view})})})})()</script>';
+  }
+  function renderSmartMarkup(data,category){
+    var isSeriesPage=/^(AS|AK|AP|AR) Battery System$/i.test(clean(category));
+    var isYanmarTractorPage=activeBrandId()==='YANMAR' && clean(category).toLowerCase()==='compact tractors';
+    var filterCategory=function(value){return clean(value).replace(/^Vauums$/i,'Vacuums');};
+    var types=distinct(data.families.map(function(f){
+      return isSeriesPage ? filterCategory(f.category) : f.subcategory;
+    }));
+    if(isSeriesPage) types.sort(function(a,b){return a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'});});
+    if(clean(category).toLowerCase()==='blowers'){
+      types=types.filter(function(x){return /\bblower\b/i.test(x);});
+      types.sort(function(a,b){
+        var rank=function(x){return /handheld/i.test(x)?1:/backpack/i.test(x)?2:3;};
+        return rank(a)-rank(b) || a.localeCompare(b);
+      });
+    }
+    if(clean(category).toLowerCase()==='hedge trimmers'){
+      types.sort(function(a,b){
+        var rank=function(x){return /^hedge trimmer$/i.test(clean(x))?0:1;};
+        return rank(a)-rank(b) || a.localeCompare(b);
+      });
+    }
+    var powers=sortPowerTypes(distinct(data.families.map(function(f){return f.power;})));
+    var series=distinct(data.families.map(function(f){return f.series;}));
+    var seriesRank={AS:1,AK:2,AP:3,AR:4};
+    if(['blowers','hedge trimmers'].indexOf(clean(category).toLowerCase())>=0){
+      series=['AS','AK','AP','AR'].concat(series.filter(function(x){
+        return !seriesRank[clean(x).toUpperCase()];
+      }));
+    }
+    series.sort(function(a,b){
+      var ra=seriesRank[clean(a).toUpperCase()]||99;
+      var rb=seriesRank[clean(b).toUpperCase()]||99;
+      return ra-rb ||
+        a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'});
+    });
+
+    var typeButtons=types.map(function(x){
+      return '<button type="button" data-filter-type="'+esc(x)+'">'+
+        esc(isSeriesPage ? x : (x.replace(/\bBlower\b/i,'').trim()||x))+
+      '</button>';
+    }).join('');
+
+    var powerButtons=powers.map(function(x){
+      return '<button type="button" data-filter-power="'+esc(x)+'">'+
+        esc(x)+
+      '</button>';
+    }).join('');
+
+    var seriesButtons=series.map(function(x){
+      return '<button type="button" data-filter-series="'+esc(x)+'">'+
+        esc(x)+
+      '</button>';
+    }).join('');
+    return '<section id="wep-smart-catalog" class="wep-smart-catalog" data-filter-scope="'+(isSeriesPage?'category':'subcategory')+'">'+
+      '<div class="wep-smart-heading"><p>'+ (isYanmarTractorPage?'Shop by series, availability or model.':(isSeriesPage?'Shop by category, availability or model.':'Shop by type, power source, availability or model.')) +'</p><h2>'+esc(category)+' &mdash; Filter, Compare &amp; Configure</h2></div>'+
+      accessoryMarkup(data,category)+
+      '<div class="wep-smart-toolbar">'+
+        (isYanmarTractorPage?'':'<div'+(isSeriesPage?' class="wep-category-row"':'')+'><strong>'+(isSeriesPage?'Category':'Type')+'</strong><div class="wep-filter-buttons" id="wep-type-filters">'+typeButtons+'</div></div>')+ (isSeriesPage?'<div class="wep-subcategory-row" id="wep-subcategory-row" hidden><strong>Subcategory</strong><div class="wep-filter-buttons" id="wep-subcategory-filters"></div></div>':'')+
+        (powers.length>1?'<div><strong>Power</strong><div class="wep-filter-buttons" id="wep-power-filters">'+powerButtons+'</div></div>':'')+
+        (series.length>1
+          ? '<div><strong>Series</strong><div class="wep-filter-buttons" id="wep-series-filters">'+seriesButtons+'</div></div>'
+          : '')+
+        '<label class="wep-stock-toggle"><input type="checkbox" id="wep-stock-only"> Normally Stocked only</label>'+
+        '<label class="wep-search-label">Search<input id="wep-smart-search" type="search" placeholder="Model or keyword"></label>'+
+      '</div>'+
+      '<div class="wep-smart-results"><span id="wep-result-count">'+data.families.length+'</span> product families</div>'+
+      '<div class="wep-smart-grid" id="wep-smart-grid">'+data.families.map(function(f){return renderFamilyCard(f,data);}).join('')+'</div>'+
+      '<div class="wep-compare-bar" id="wep-compare-bar" hidden><span><strong id="wep-compare-count">0</strong> selected</span><button type="button" id="wep-open-compare">Compare Selected</button><button type="button" id="wep-clear-compare">Clear</button></div>'+
+      '<dialog id="wep-compare-dialog"><form method="dialog"><button class="wep-dialog-close" aria-label="Close">&times;</button></form><h2>Compare Selected Models</h2><div id="wep-compare-table"></div></dialog>'+
+      '<button type="button" class="wep-cart-toggle" id="wep-cart-toggle" aria-label="Open Cart"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.2 10.2a2 2 0 0 0 2 1.6h7.6a2 2 0 0 0 2-1.6L20 8H7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10" cy="19" r="1.5" fill="currentColor"/><circle cx="17" cy="19" r="1.5" fill="currentColor"/></svg><span>Cart</span></button><section class="wep-cart" id="wep-cart" hidden><div class="wep-cart-head"><h2>Your Cart</h2><strong id="wep-cart-count">0 items</strong></div><div id="wep-cart-lines"><p class="wep-cart-empty">Your cart is empty.</p></div><p id="wep-cart-shipping-notice" role="status" hidden></p><div class="wep-cart-footer"><strong id="wep-cart-total">$0.00</strong><p>Prices and availability are confirmed during checkout.</p></div><button type="button" id="wep-cart-review" disabled>Review & Place Order</button><form id="wep-checkout-form" hidden><h3>Customer and Fulfillment Details</h3><div class="wep-checkout-fields"><label>First name *<input name="firstName" required autocomplete="given-name"></label><label>Last name *<input name="lastName" required autocomplete="family-name"></label><label>Email *<input name="email" type="email" required autocomplete="email"></label><label>Phone *<input name="phone" type="tel" required autocomplete="tel"></label><label>Address *<input name="address1" required autocomplete="street-address"></label><label>Apartment or suite<input name="address2"></label><label>City *<input name="city" required autocomplete="address-level2"></label><label>State *<input name="state" required maxlength="2" autocomplete="address-level1"></label><label>ZIP *<input name="zip" required pattern="[0-9]{5}" inputmode="numeric" autocomplete="postal-code"></label><label>Fulfillment *<select name="fulfillment" required><option value="PICKUP_NEW_MILFORD">Pickup in New Milford</option><option value="PICKUP_DANBURY">Pickup in Danbury</option><option value="SHIP" hidden disabled>Ship GTA 26 Kit by UPS</option></select></label></div><div id="wep-shipping-rate" hidden><button type="button" id="wep-calculate-shipping">Calculate UPS Shipping</button><strong id="wep-shipping-total"></strong></div><label class="wep-terms"><input name="termsAccepted" type="checkbox" required> All online sales are final and cannot be returned or cancelled once the order is submitted. Please contact us at sales@westendpower.com prior to checking out if you have any questions. I understand and accept these conditions.</label><p id="wep-checkout-error" role="alert" hidden></p><button type="submit" id="wep-cart-checkout">Continue to Secure Checkout</button></form></section>'+
+    '</section>';
+  }
+  function smartCss(){
+    return '<style id="wep-smart-style">'+
+
+    '.wep-product-section,.wep-comparison{display:none!important}'+
+
+    '.wep-smart-catalog{margin:30px 0;font-family:Arial,sans-serif;color:#171717}'+
+    '.wep-smart-heading{text-align:center;margin:0 0 18px}'+
+    '.wep-smart-heading p{margin:0 0 4px;color:#606974}'+
+    '.wep-smart-heading h2{margin:0;font-size:30px}'+
+
+    '.wep-accessory-nav{display:flex;flex-wrap:wrap;gap:9px;margin:0 0 16px}.wep-accessory-nav button{padding:10px 18px;border:2px solid #238b45;border-radius:7px;background:#fff;color:#183623;font-size:16px;font-weight:800;cursor:pointer}.wep-accessory-nav button[aria-pressed="true"]{background:#238b45;color:#fff}.wep-accessory-panel[hidden]{display:none!important}.wep-accessory-panel{margin:0 0 20px;padding:20px;border:1px solid #d2d6db;border-radius:10px;background:#fafbfc}.wep-accessory-panel h3{margin:0 0 6px;font-size:24px}.wep-accessory-panel p{margin:0 0 18px}.wep-accessory-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}.wep-accessory-card{border:1px solid #cbd3d8;border-radius:8px;padding:17px;background:#fff}.wep-accessory-card h4{margin:0 0 12px;font-size:18px}.wep-accessory-card strong{font-size:20px}.wep-smart-catalog.wep-show-accessories .wep-smart-toolbar,.wep-smart-catalog.wep-show-accessories .wep-smart-results,.wep-smart-catalog.wep-show-accessories .wep-smart-grid,.wep-smart-catalog.wep-show-accessories .wep-compare-bar,.wep-smart-catalog.wep-show-accessories .wep-cart{display:none!important}'+
+    '.wep-smart-toolbar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:14px;border:1px solid #d2d6db;border-radius:10px;background:#fafbfc}'+
+    '.wep-filter-buttons{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}'+
+    '.wep-category-row,.wep-subcategory-row{grid-column:1/-1}.wep-subcategory-row[hidden]{display:none!important}'+
+    '.wep-filter-buttons button,.wep-compare-bar button{border:1px solid #333;border-radius:999px;background:#fff;padding:7px 10px;font-weight:800;cursor:pointer}'+
+    '.wep-filter-buttons button.active{background:#202020;color:#fff}'+
+    '.wep-stock-toggle{display:flex;align-items:center;gap:7px;font-weight:800;grid-column:1/2}'+
+    '.wep-stock-toggle input{width:auto}'+
+    '.wep-search-label{grid-column:2/4}.wep-search-label input{display:block;width:100%;margin-top:5px;padding:9px;border:1px solid #bbb;border-radius:7px}'+
+    '.wep-smart-results{margin:13px 0;font-weight:800}'+
+
+    '.wep-smart-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;align-items:stretch}'+
+
+    '.wep-smart-card{display:flex;flex-direction:column;min-width:0;overflow:hidden;border:2px solid #bcc3ca;border-radius:11px;background:linear-gradient(145deg,#ffffff 0%,#fbfcfd 42%,#f1f3f5 100%);box-shadow:0 3px 10px rgba(0,0,0,.09);padding:9px}'+
+
+    '.wep-card-header{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px;margin-bottom:8px;padding:7px 9px;border:1px solid #196b34;border-radius:7px;background:#238B45;color:#202428;box-shadow:0 1px 3px rgba(0,0,0,.10)}'+'.wep-model-heading{display:flex;align-items:baseline;gap:7px;min-width:0;margin:0}'+
+    '.wep-model-heading strong{font-size:20px;line-height:1;font-weight:900;color:#fff;letter-spacing:.15px;white-space:nowrap;text-shadow:none}'+
+    '.wep-model-heading span{font-size:13px;line-height:1;font-weight:700;color:#EEF5F0;white-space:nowrap}'+
+
+    '.wep-compare-pick{display:flex;align-items:center;gap:4px;flex:0 0 auto;margin:0;padding:4px 8px;border:1px solid #e2e5e8;border-radius:999px;background:#fff;color:#252a2e;font-size:10px;font-weight:800;white-space:nowrap}'+
+    '.wep-compare-pick input{width:auto;margin:0}'+
+
+    '.wep-card-main{display:grid;grid-template-columns:minmax(0,.95fr) minmax(0,1.25fr);gap:9px;align-items:stretch}'+
+
+    '.wep-card-left{display:flex;flex-direction:column;min-width:0}'+
+
+    '.wep-smart-media{position:relative;display:flex;align-items:center;justify-content:center;width:100%;min-height:250px;overflow:hidden;border:1px solid #cfd4da;border-radius:7px;background:linear-gradient(180deg,#fff,#f8fafb);box-shadow:0 1px 3px rgba(0,0,0,.04)}'+
+    '.wep-image-link{display:flex;width:100%;height:100%;align-items:center;justify-content:center}'+
+    '.wep-external-details{display:flex;justify-content:center;margin:8px auto 0;width:max-content;font-size:12px;font-weight:800;color:#235C37;text-decoration:none}'+
+    '.wep-external-details:hover{text-decoration:underline}'+
+    '.wep-smart-media img{display:block;width:100%;height:100%;object-fit:contain;padding:46px 5px 5px;box-sizing:border-box}'+
+    '.wep-smart-placeholder{font-weight:800;color:#666}'+
+
+    '.wep-promo-ribbon{position:absolute;z-index:5;left:7px;right:7px;top:6px;height:39px;display:flex;align-items:center;justify-content:center;pointer-events:none}'+
+    '.wep-ribbon-center{position:relative;z-index:3;min-width:62%;padding:4px 9px 5px;border:2px solid #d6b53a;border-radius:4px;background:linear-gradient(90deg,#990000,#d72128 35%,#c4161d 70%,#8e0000);color:#fff3a3;text-align:center;box-shadow:0 2px 4px rgba(0,0,0,.18)}'+
+    '.wep-ribbon-center strong{display:block;font-size:10px;line-height:1;font-weight:900;white-space:nowrap;color:#fff3a3}'+
+    '.wep-ribbon-center small{display:block;margin-top:3px;font-size:7px;line-height:1;font-weight:900;white-space:nowrap;color:#fff}'+
+    '.wep-ribbon-tail{position:absolute;z-index:1;top:9px;width:24%;height:25px;border:1px solid #d6b53a;background:linear-gradient(90deg,#870000,#c8171f)}'+
+    '.wep-ribbon-left{left:0;clip-path:polygon(0 0,100% 15%,78% 100%,0 85%)}'+
+    '.wep-ribbon-right{right:0;clip-path:polygon(0 15%,100% 0,100% 85%,22% 100%)}'+
+
+    '.wep-card-buy{display:flex;flex-direction:column;gap:6px;min-width:0;height:100%}'+
+
+    '.wep-price-lines{display:flex;flex-direction:column;gap:6px;margin:0}'+
+    '.wep-price-choice{padding:8px 9px;border:1px solid #cfd4da;border-radius:7px;background:linear-gradient(180deg,#fff,#fafbfc);box-shadow:0 1px 3px rgba(0,0,0,.04);text-align:left}'+
+    '.wep-price-choice.wep-kit-choice{border-color:#ddb3b9;background:linear-gradient(180deg,#fff,#fff8f8)}'+
+
+    '.wep-price-heading{display:flex;align-items:baseline;justify-content:space-between;gap:7px;width:100%;margin:0;white-space:nowrap}'+
+    '.wep-price-label{flex:0 0 auto;font-size:18px;line-height:1;font-weight:900;white-space:nowrap}'+
+    '.wep-price-pair{display:flex;align-items:baseline;justify-content:flex-end;gap:5px;flex:0 0 auto;margin:0;white-space:nowrap}'+
+    '.wep-price-pair del{font-size:12px;line-height:1;color:#666;white-space:nowrap}'+
+    '.wep-price-pair strong{font-size:21px;line-height:1;font-weight:900;color:#c8102e;white-space:nowrap}'+
+    '.wep-price-coming-soon{font-size:13px!important;color:#555!important}'+
+
+    '.wep-includes,.wep-package-value{display:block;margin-top:5px;text-align:center;line-height:1.15;white-space:nowrap}'+
+    '.wep-includes{font-size:11px;color:#5d6670;font-weight:700}'+
+    '.wep-package-value{font-size:10.5px;color:#555;font-weight:800}'+
+    '.wep-save{font-size:10.5px!important;color:#287a32!important;font-weight:900!important}'+
+    '.wep-package-spacer{visibility:hidden;height:11px}'+
+
+    '.wep-config-row{display:grid;grid-template-columns:minmax(0,1fr) 48px;gap:6px;margin:0}'+
+    '.wep-variant,.wep-main-qty{width:100%;height:35px;margin:0;padding:5px 7px;border:1px solid #c4cbd2;border-radius:6px;background:#fff;font-size:10.5px;font-weight:700;box-sizing:border-box}'+
+    '.wep-main-qty{text-align:center}'+
+
+    '.wep-smart-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;margin:0}'+
+    '.wep-smart-actions.wep-two-actions{grid-template-columns:1fr}'+
+    '.wep-smart-actions a,.wep-smart-actions button{display:flex;align-items:center;justify-content:center;min-height:31px;padding:4px 5px;border:1px solid #25313c;border-radius:6px;background:#fff;color:#202832;text-decoration:none;font-size:9px;line-height:1;font-weight:900;text-align:center;cursor:pointer}'+
+    '.wep-smart-actions a{font-size:13px!important;font-weight:800!important}'+
+
+    '.wep-add-cart{grid-column:1/-1;display:flex!important;align-items:center!important;justify-content:center!important;gap:6px!important;min-height:39px!important;background:#c8102e!important;border-color:#c8102e!important;color:#fff!important;font-size:10.5px!important}'+
+    '.wep-add-cart svg{width:16px;height:16px;flex:0 0 auto}'+
+
+    '.wep-spec-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;margin:4px 0 0}'+
+    '.wep-spec-tile{display:flex;align-items:center;justify-content:center;min-width:0;min-height:50px;padding:5px 7px;border:1px solid #aeb5bc;border-radius:6px;background:#d4d8dc;text-align:center}'+
+    '.wep-spec-copy{display:block;width:100%;min-width:0;text-align:center}'+
+    '.wep-spec-label{display:block;font-size:11px;line-height:1.1;font-weight:700;color:#5c6670;text-align:center;white-space:normal}'+
+    '.wep-spec-copy strong{display:block;margin-top:3px;font-size:14px;line-height:1.05;font-weight:900;color:#202428;text-align:center;white-space:nowrap}'+
+
+    '.wep-compare-bar{position:sticky;bottom:12px;z-index:20;display:flex;align-items:center;gap:9px;margin:18px auto;padding:10px 13px;max-width:620px;border-radius:10px;background:#202020;color:#fff;box-shadow:0 5px 20px rgba(0,0,0,.25)}'+
+    '.wep-compare-bar[hidden]{display:none}'+
+    '.wep-compare-bar span{margin-right:auto}'+
+
+    '.wep-cart{margin:28px 0;padding:18px;border:2px solid #202020;border-radius:12px;background:#fff}'+
+    '.wep-cart-head{display:flex;justify-content:space-between;align-items:center}'+
+    '.wep-cart-line{display:grid;grid-template-columns:1fr auto auto;gap:11px;align-items:center;padding:11px 0;border-top:1px solid #ddd}'+
+    '.wep-cart-line small{display:block;color:#666}'+
+    '.wep-cart-line button{border:0;background:none;text-decoration:underline;cursor:pointer}'+
+    '.wep-cart-footer{display:flex;justify-content:space-between;gap:18px;align-items:start;border-top:2px solid #222;padding-top:12px}'+
+    '.wep-cart-footer strong{font-size:25px}'+
+    '.wep-cart-footer p{max-width:560px;margin:0;color:#555}'+
+    '.wep-cart-empty{color:#666}.wep-cart[hidden]{display:none!important}.wep-cart-toggle{position:fixed;top:18px;right:18px;z-index:10000;display:flex;align-items:center;justify-content:center;gap:7px;margin:0;padding:10px 17px;border:2px solid #c8102e;border-radius:999px;background:#fff;color:#c8102e;font-size:15px;font-weight:900;cursor:pointer;box-shadow:0 3px 12px rgba(0,0,0,.18)}.wep-cart-toggle svg{width:21px;height:21px;flex:0 0 auto}'+
+    '.wep-cart button{cursor:pointer}.wep-cart button:disabled{opacity:.5;cursor:not-allowed}.wep-cart #wep-cart-review,.wep-cart #wep-cart-checkout{margin-top:14px;padding:12px 18px;border:0;border-radius:7px;background:#238b45;color:#fff;font-weight:900}.wep-checkout-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.wep-checkout-fields label{font-weight:800}.wep-checkout-fields input,.wep-checkout-fields select{display:block;width:100%;box-sizing:border-box;margin-top:5px;padding:9px;border:1px solid #aaa;border-radius:6px}.wep-terms{display:flex;align-items:start;gap:8px;margin-top:16px}.wep-terms input{margin-top:3px}#wep-checkout-error{padding:10px;background:#fff0f0;color:#a00000;font-weight:800}#wep-checkout-form[hidden],#wep-checkout-error[hidden]{display:none}'+
+    '#wep-shipping-rate{margin-top:14px}#wep-shipping-rate[hidden]{display:none}#wep-shipping-rate button{padding:10px 14px;border:1px solid #238b45;border-radius:7px;background:#fff;color:#18642d;font-weight:800}#wep-shipping-total{margin-left:12px}'+
+    '#wep-cart-shipping-notice{padding:12px;border:2px solid #d69123;border-radius:8px;background:#fff8e9;color:#563800;font-weight:800}#wep-cart-shipping-notice[hidden]{display:none}'+
+
+    'dialog#wep-compare-dialog{width:min(1100px,94vw);max-height:90vh;border:0;border-radius:12px;padding:20px;box-shadow:0 14px 50px rgba(0,0,0,.35)}'+
+    'dialog#wep-compare-dialog::backdrop{background:rgba(0,0,0,.55)}'+
+    '.wep-dialog-close{float:right;border:0;background:none;font-size:30px;cursor:pointer}'+
+    '.wep-compare-table-wrap{overflow:auto}'+
+    '.wep-compare-table{width:100%;border-collapse:collapse;min-width:700px}'+
+    '.wep-compare-table th,.wep-compare-table td{padding:9px;border-bottom:1px solid #ddd;text-align:left}'+
+    '.wep-compare-table thead th{background:#202020;color:#fff;position:sticky;top:0}'+
+
+    '.wep-smart-card[hidden]{display:none!important}'+
+
+    '@media(max-width:1100px){'+
+      '.wep-smart-grid{grid-template-columns:repeat(2,minmax(0,1fr))}'+
+      '.wep-card-main{grid-template-columns:1fr}'+
+      '.wep-smart-media{min-height:280px}'+
+      '.wep-model-heading strong{font-size:20px;line-height:1;font-weight:900;color:#fff;letter-spacing:.15px;white-space:nowrap;text-shadow:none}'+
+      '.wep-model-heading span{font-size:13px;line-height:1;font-weight:700;color:#EEF5F0;white-space:nowrap}'+
+      '.wep-spec-strip{grid-template-columns:repeat(2,minmax(0,1fr))}'+
+      '.wep-price-label{font-size:19px}'+
+      '.wep-price-pair strong{font-size:22px}'+
+    '}'+
+
+    '@media(max-width:700px){'+
+      '.wep-smart-grid{grid-template-columns:1fr}'+
+      '.wep-card-main{grid-template-columns:1fr}'+
+    '}'+
+    '@media(max-width:520px){'+
+      '.wep-smart-toolbar{grid-template-columns:1fr}.wep-stock-toggle,.wep-search-label{grid-column:1}'+
+      '.wep-card-header{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px;margin-bottom:8px;padding:7px 9px;border:1px solid #196b34;border-radius:7px;background:#238B45;color:#202428;box-shadow:0 1px 3px rgba(0,0,0,.10)}'+'.wep-model-heading{display:block}'+
+      '.wep-model-heading span{font-size:13px;line-height:1;font-weight:700;color:#EEF5F0;white-space:nowrap}'+
+      '.wep-smart-media{min-height:240px}'+
+      '.wep-spec-tile{gap:6px}'+
+      '.wep-spec-label{font-size:10px}'+
+      '.wep-spec-copy strong{font-size:13px}'+
+      '.wep-cart-line{grid-template-columns:1fr auto}'+
+      '.wep-cart-footer{display:block}'+
+      '.wep-checkout-fields{grid-template-columns:1fr}'+
+    '}'+
+
+        '.wep-variant,.wep-main-qty{height:36px!important;font-size:13px!important;font-weight:800!important}'+
+    '.wep-smart-actions a,.wep-smart-actions button{min-height:36px!important;font-size:13px!important;font-weight:800!important;padding:5px 7px!important}'+
+    '.wep-add-cart{grid-column:1/-1;display:flex!important;align-items:center!important;justify-content:center!important;gap:6px!important;min-height:36px!important;font-size:13px!important;font-weight:800!important;background:#c8102e!important;color:#fff!important;border-color:#c8102e!important}'+
+    '.wep-add-cart svg{width:16px;height:16px;flex:0 0 auto}'+
+    '.wep-main-qty{width:100%;text-align:center}'+
+    '.wep-component-buy{display:flex;align-items:center;gap:7px;margin-top:10px}'+
+    '.wep-component-buy label{display:flex;align-items:center;gap:6px;font-weight:800}'+
+    '.wep-component-buy input{width:64px;padding:6px;border:1px solid #aaa;border-radius:6px}'+
+    '.wep-component-buy button{padding:7px 11px;border:1px solid #222;border-radius:6px;background:#222;color:#fff;font-weight:900;cursor:pointer}'+
+    '.wep-component-note{display:block;margin-top:7px;color:#666;font-size:11px}'+'</style>';
+  }
+  function iframeResizeScript(){
+    return '<script>(function(){if(window.parent===window)return;var page=document.querySelector(".wep-page");if(!page)return;var last=0,pending=false;function send(){pending=false;var height=Math.ceil(page.getBoundingClientRect().bottom+window.scrollY+16);if(height>0&&height!==last){last=height;window.parent.postMessage({type:"westend-stihl-ap-height",height:height},"*")}}function queue(){if(!pending){pending=true;requestAnimationFrame(send)}}if(window.ResizeObserver){new ResizeObserver(queue).observe(page)}else{new MutationObserver(queue).observe(page,{childList:true,subtree:true,attributes:true})}window.addEventListener("load",queue);window.addEventListener("resize",queue);document.addEventListener("load",queue,true);queue()})()</script>';
+  }
+  function runtimeScript(data){
+    var safe=JSON.stringify(data).replace(/</g,'\\u003c');
+    return '<script>(function(){'+
+      'var DATA='+safe+';var families=DATA.families||[];var byKey={};families.forEach(function(f){byKey[f.key]=f;});var compare=[];var type="";var subtype="";var power="";var series="";'+
+      'function q(s,r){return (r||document).querySelector(s)}function qa(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))}function m(v){return "$"+Number(v||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}function esc(v){var d=document.createElement("div");d.textContent=String(v==null?"":v);return d.innerHTML}'+
+      'function selectedVariant(key){var f=byKey[key],sel=q(".wep-variant[data-family=\\\""+CSS.escape(key)+"\\\"]");if(!f||!sel||sel.value==="")return null;return f.variants[Number(sel.value)]||null}'+
+      'function openExternal(url){if(!/^https?:\\/\\//i.test(String(url||"")))return;var host="";try{host=new URL(url,location.href).hostname.toLowerCase()}catch(e){}var isWestEnd=host==="westendpower.com"||/\\.westendpower\\.com$/.test(host);if(isWestEnd){window.open(url,"_blank","noopener,noreferrer");return}if(confirm("You are leaving West End Power. Product information will open in a new tab. Your shopping page will stay open. Continue?"))window.open(url,"_blank","noopener,noreferrer")}'+
+      "var cart=[];try{cart=JSON.parse(localStorage.getItem(\"wepCart\")||\"[]\");if(!Array.isArray(cart))cart=[]}catch(e){cart=[]}var checkoutBusy=false;var shippingQuote=null;var API=\"https://westendpower-configurator-api.westendpower-nm.workers.dev\";var STRIPE=\"https://westendpower-stripe-checkout.westendpower-nm.workers.dev\";\nfunction cartQty(raw){var n=Number(raw);return Number.isInteger(n)&&n>=1&&n<=99?n:0}\nfunction addLine(sku,name,qty,price,shipping,description){if(!sku||!cartQty(qty)){alert(\"Enter a quantity from 1 to 99.\");return false}var x=cart.find(function(row){return row.sku===sku});if(x){if(x.quantity+qty>99){alert(\"The maximum quantity per item is 99.\");return false}x.quantity+=qty}else cart.push({sku:sku,productName:name,description:description||\"\",quantity:qty,itemPrice:price,shipping:shipping||null});return true}\nfunction canShip(){return cart.length===1&&cart[0].sku===\"GA01 011 6911 US\"&&cart[0].quantity===1&&!!cart[0].shipping}\nfunction updateShippingChoice(){var form=q(\"#wep-checkout-form\"),choice=form.elements.fulfillment,option=choice.querySelector('[value=\"SHIP\"]');option.hidden=!canShip();option.disabled=!canShip();if(!canShip()&&choice.value===\"SHIP\")choice.value=\"PICKUP_NEW_MILFORD\";q(\"#wep-shipping-rate\").hidden=choice.value!==\"SHIP\"}\nfunction resetShipping(){shippingQuote=null;q(\"#wep-shipping-total\").textContent=\"\";checkoutError(\"\")}\nfunction drawCart(){try{localStorage.setItem(\"wepCart\",JSON.stringify(cart))}catch(e){}var lines=q(\"#wep-cart-lines\"),count=q(\"#wep-cart-count\"),total=q(\"#wep-cart-total\"),review=q(\"#wep-cart-review\"),form=q(\"#wep-checkout-form\");if(!lines)return;lines.innerHTML=cart.length?cart.map(function(x,i){return '<div class=\"wep-cart-line\"><div><strong>'+esc(x.productName)+'</strong><small>SKU '+esc(x.sku)+' &middot; Qty '+x.quantity+'</small></div><strong>'+m(x.itemPrice*x.quantity)+'</strong><button type=\"button\" data-remove-cart=\"'+i+'\">Remove</button></div>'}).join(\"\"):'<p class=\"wep-cart-empty\">Your cart is empty.</p>';var itemCount=cart.reduce(function(n,x){return n+x.quantity},0);count.textContent=itemCount+\" items\";var toggleCount=q(\"#wep-cart-toggle-count\");if(toggleCount)toggleCount.textContent=itemCount;total.textContent=m(cart.reduce(function(n,x){return n+x.itemPrice*x.quantity},0));review.disabled=!cart.length||checkoutBusy;var notice=q(\"#wep-cart-shipping-notice\"),gta=cart.find(function(x){return x.sku===\"GA01 011 6911 US\"});var mixed=!!gta&&cart.some(function(x){return x.sku!==\"GA01 011 6911 US\"});notice.hidden=!mixed;notice.textContent=mixed?\"Your cart has a GTA 26 kit and pickup-only items. To ship the GTA 26, place it in a separate order. You can pick up the entire cart in New Milford or Danbury.\":\"\";if(!cart.length)form.hidden=true;resetShipping();updateShippingChoice();qa(\"[data-remove-cart]\").forEach(function(button){button.onclick=function(){if(checkoutBusy)return;cart.splice(Number(button.dataset.removeCart),1);drawCart()}})}\nfunction addMainToCart(key){var v=selectedVariant(key),f=byKey[key];if(!v){alert(\"Choose a purchase option before adding this item to the cart.\");return}var input=q('[data-main-qty=\"'+CSS.escape(key)+'\"]'),qty=cartQty(input&&input.value);if(!qty){alert(\"Enter a quantity from 1 to 99.\");return}if(!(Number(v.price)>0)){alert(\"Pricing Coming Soon for this purchase option.\");return}var lines=v.isRecommendedPackage?[{sku:v.sku,name:f.name+' â€” Tool Only',description:v.description||f.description||'',quantity:qty,price:Number(v.price)-(v.packageItems||[]).reduce(function(n,x){return n+Number(x.price)*Number(x.qty)},0)}].concat((v.packageItems||[]).map(function(x){return {sku:x.sku,name:x.name,quantity:qty*Number(x.qty),price:Number(x.price)}})):[{sku:v.sku,name:f.name+' â€” '+v.label,description:v.description||f.description||'',quantity:qty,price:Number(v.price),shipping:v.shipping}];if(lines.some(function(x){return !x.sku||!cartQty(x.quantity)||!(x.price>=0)})){alert(\"This purchase option cannot be added at the selected quantity.\");return}if(lines.some(function(x){var existing=cart.find(function(row){return row.sku===x.sku});return existing&&existing.quantity+x.quantity>99})){alert(\"The maximum quantity per item is 99.\");return}lines.forEach(function(x){addLine(x.sku,x.name,x.quantity,x.price,x.shipping,x.description)});drawCart();if(input)input.value=1}\nfunction addComponentToCart(sku,raw){var item=DATA.batteries.concat(DATA.chargers).find(function(x){return x.sku===sku}),qty=cartQty(raw);if(!item||!(Number(item.price)>0)){alert(\"Pricing Coming Soon for this item.\");return}if(!qty){alert(\"Enter a quantity from 1 to 99.\");return}if(addLine(sku,item.label,qty,Number(item.price),null,item.description||\"\")){drawCart()}}\nfunction checkoutError(message){var box=q(\"#wep-checkout-error\");box.textContent=message;box.hidden=!message}\nasync function calculateShipping(){var form=q(\"#wep-checkout-form\"),zip=form.elements.zip.value.trim(),button=q(\"#wep-calculate-shipping\");resetShipping();if(!canShip()||form.elements.fulfillment.value!==\"SHIP\"){checkoutError(\"Only one GTA 26 Kit can be shipped in an order.\");return}if(!/^[0-9]{5}$/.test(zip)){checkoutError(\"Enter a valid five-digit destination ZIP code first.\");return}button.disabled=true;button.textContent=\"Calculating...\";try{var parcel=cart[0].shipping,response=await fetch(API+\"/shipping-rate\",{method:\"POST\",headers:{\"Content-Type\":\"application/json\"},body:JSON.stringify({destinationZIP:zip,weight:parcel.weight,length:parcel.length,width:parcel.width,height:parcel.height})}),rate=await response.json();if(!response.ok)throw Error(rate.error||\"UPS shipping rate could not be calculated.\");if(!(Number(rate.amount)>0))throw Error(\"UPS did not return a valid shipping rate.\");shippingQuote={zip:zip,sku:cart[0].sku,amount:Number(rate.amount),service:String(rate.service||\"UPS Ground\"),businessDaysInTransit:Number(rate.businessDaysInTransit)||null};q(\"#wep-shipping-total\").textContent=shippingQuote.service+\" &mdash; \"+m(shippingQuote.amount)}catch(error){checkoutError(error.message||\"UPS shipping rate could not be calculated.\")}finally{button.disabled=false;button.textContent=\"Calculate UPS Shipping\"}}\nasync function submitCart(e){e.preventDefault();if(checkoutBusy||!cart.length)return;var form=q(\"#wep-checkout-form\");if(!form.reportValidity())return;var values=Object.fromEntries(new FormData(form).entries());if(!/^[A-Za-z]{2}$/.test(values.state||\"\")){checkoutError(\"Enter a two-letter state abbreviation.\");return}if(!/^[0-9]{5}$/.test(values.zip||\"\")){checkoutError(\"Enter a valid five-digit ZIP code.\");return}if(values.fulfillment===\"SHIP\"&&(!canShip()||!shippingQuote||shippingQuote.zip!==values.zip.trim()||shippingQuote.sku!==cart[0].sku)){checkoutError(\"Calculate UPS shipping for this cart and ZIP code before checkout.\");return}var shipping=values.fulfillment===\"SHIP\"?{carrier:\"UPS\",service:shippingQuote.service,amount:shippingQuote.amount,destinationZIP:shippingQuote.zip,businessDaysInTransit:shippingQuote.businessDaysInTransit}:{carrier:\"\",service:\"\",amount:0,destinationZIP:\"\",businessDaysInTransit:null};var button=q(\"#wep-cart-checkout\");checkoutBusy=true;button.disabled=true;button.textContent=\"Creating Order...\";checkoutError(\"\");drawCart();try{var order=await fetch(API+\"/online-order\",{method:\"POST\",headers:{\"Content-Type\":\"application/json\"},body:JSON.stringify({customer:{firstName:values.firstName.trim(),lastName:values.lastName.trim(),email:values.email.trim(),phone:values.phone.trim(),address1:values.address1.trim(),address2:(values.address2||\"\").trim(),city:values.city.trim(),state:values.state.trim().toUpperCase(),zip:values.zip.trim()},items:cart.map(function(x){return {sku:x.sku,productName:x.productName,quantity:x.quantity,itemPrice:x.itemPrice}}),fulfillment:values.fulfillment,shipping:shipping,termsAccepted:true})});var data=await order.json();if(!order.ok)throw Error(data.error||\"Order could not be created.\");if(!data.orderNumber||!data.checkoutToken)throw Error(\"The order response did not include a checkout token.\");button.textContent=\"Opening Secure Checkout...\";var response=await fetch(STRIPE+\"/online-order-checkout\",{method:\"POST\",headers:{\"Content-Type\":\"application/json\"},body:JSON.stringify({orderNumber:data.orderNumber,checkoutToken:data.checkoutToken})});var checkout=await response.json();if(!response.ok)throw Error(checkout.error||\"Stripe Checkout could not be opened.\");if(!/^https:\\/\\//i.test(checkout.checkoutUrl||\"\"))throw Error(\"Stripe returned no secure Checkout URL.\");location.href=checkout.checkoutUrl}catch(err){checkoutError(err.message||\"Checkout could not be opened. Please try again.\");checkoutBusy=false;button.disabled=false;button.textContent=\"Continue to Secure Checkout\";drawCart()}}\nq(\"#wep-cart-toggle\").onclick=function(){try{localStorage.setItem(\"wepContinueShoppingUrl\",location.href);localStorage.setItem(\"wepCart\",JSON.stringify(cart))}catch(e){}window.open(\"cart.html\",\"_blank\")};q(\"#wep-cart-review\").onclick=function(){var form=q(\"#wep-checkout-form\");form.hidden=false;form.scrollIntoView({behavior:\"smooth\",block:\"start\"})};q(\"#wep-checkout-form\").addEventListener(\"submit\",submitCart);q(\"#wep-checkout-form\").elements.fulfillment.addEventListener(\"change\",function(){resetShipping();updateShippingChoice()});q(\"#wep-checkout-form\").elements.zip.addEventListener(\"input\",resetShipping);q(\"#wep-calculate-shipping\").addEventListener(\"click\",calculateShipping);drawCart();\n"+
+      'window.addEventListener("storage",function(e){if(e.key!=="wepCart")return;try{cart=JSON.parse(e.newValue||"[]");if(!Array.isArray(cart))cart=[]}catch(err){cart=[]}drawCart()});'+
+      'function compatible(list,sys){sys=String(sys||"").toUpperCase();return (list||[]).filter(function(x){return String(x.system||"").toUpperCase().split(/[|,;/]+/).map(function(y){return y.trim()}).indexOf(sys)>=0})}'+
+      'function drawOptions(key){var v=selectedVariant(key),zone=q(".wep-smart-battery-zone[data-family=\\\""+CSS.escape(key)+"\\\"]");if(!v||!zone)return;if(v.isKit){zone.innerHTML=v.kitIncludes?"<div class=\\\"wep-kit-includes\\\"><strong>Factory kit includes:</strong> "+esc(v.kitIncludes)+"</div>":"";reTotal(key);return;}var bats=compatible(DATA.batteries,v.system),chs=compatible(DATA.chargers,v.system);if(!bats.length&&!chs.length){zone.innerHTML="";reTotal(key);return;}zone.innerHTML="<div class=\\\"wep-smart-option-row\\\">"+(bats.length?"<label>Battery<select data-battery=\\\""+esc(key)+"\\\"><option value=\\\"\\\">No added battery</option>"+bats.map(function(x){return "<option value=\\\""+esc(x.sku)+"\\\">"+esc(x.label)+" &mdash; "+m(x.price)+"</option>"}).join("")+"</select></label>":"")+(chs.length?"<label>Charger<select data-charger=\\\""+esc(key)+"\\\"><option value=\\\"\\\">No added charger</option>"+chs.map(function(x){return "<option value=\\\""+esc(x.sku)+"\\\">"+esc(x.label)+" &mdash; "+m(x.price)+"</option>"}).join("")+"</select></label>":"")+"</div>";qa("select",zone).forEach(function(s){s.addEventListener("change",function(){reTotal(key)})});reTotal(key)}'+
+      'function findOpt(list,sku){return (list||[]).find(function(x){return x.sku===sku})||null}function selectedExtras(key){var b=q("[data-battery=\\\""+CSS.escape(key)+"\\\"]"),c=q("[data-charger=\\\""+CSS.escape(key)+"\\\"]");return {battery:b?findOpt(DATA.batteries,b.value):null,charger:c?findOpt(DATA.chargers,c.value):null}}'+
+      'function reTotal(key){var v=selectedVariant(key);if(!v)return;var cat=encodeURIComponent((byKey[key]&&byKey[key].category)||"Equipment"),ret=encodeURIComponent(location.href);var o=q("[data-options=\\\""+CSS.escape(key)+"\\\"]");if(o)o.href="product-options.html?sku="+encodeURIComponent(v.sku)+"&category="+cat+"&return="+ret;var r=q("[data-runtime=\\\""+CSS.escape(key)+"\\\"]");if(r)r.href=v.configure||"#";var link=q("[data-product-link=\\\""+CSS.escape(key)+"\\\"]"),details=q("[data-product-details=\\\""+CSS.escape(key)+"\\\"]");if(link){var url=String(v.details||"");if(/^https?:\\/\\//i.test(url)){link.href=url;link.dataset.wepExternal="1";if(details){details.href=url;details.hidden=false}}else{link.removeAttribute("href");delete link.dataset.wepExternal;if(details)details.hidden=true}}}'+
+      "function updateSubtypes(){var row=q(\"#wep-subcategory-row\"),list=q(\"#wep-subcategory-filters\");if(!row||!list)return;list.innerHTML=\"\";row.hidden=true;if(!type)return;var values=[];families.forEach(function(f){if(String(f.category||\"\").replace(/^Vauums$/i,\"Vacuums\")===type&&f.subcategory&&values.indexOf(f.subcategory)<0)values.push(f.subcategory)});values.sort(function(a,b){if(type===\"Blowers\"){var rank=function(x){return /Handheld/i.test(x)?0:/Backpack/i.test(x)?1:2};return rank(a)-rank(b)||a.localeCompare(b)}return a.localeCompare(b)});values.forEach(function(value){var b=document.createElement(\"button\");b.type=\"button\";b.dataset.filterSubtype=value;b.textContent=type===\"Blowers\"?value.replace(/\\bBlower\\b/i,\"\").trim()||value:value;b.onclick=function(){subtype=subtype===value?\"\":value;qa(\"[data-filter-subtype]\").forEach(function(x){x.classList.toggle(\"active\",subtype!==\"\"&&x.dataset.filterSubtype===subtype)});filters()};list.appendChild(b)});row.hidden=!values.length}"+
+      'function filters(){var search=(q("#wep-smart-search")||{}).value||"";search=search.toUpperCase();var only=!!(q("#wep-stock-only")||{}).checked;var visible=0;qa(".wep-smart-card").forEach(function(card){var f=byKey[card.dataset.family];var scope=(q("#wep-smart-catalog")||{}).dataset.filterScope;var filterValue=scope==="category"?String(f.category||"").replace(/^Vauums$/i,"Vacuums"):f.subcategory;var ok=(!type||filterValue===type)&&(!subtype||f.subcategory===subtype)&&(!power||f.power===power)&&(!series||f.series===series)&&(!only||(f.normalLocations&&f.normalLocations.length))&&(!search||(f.name+" "+f.subcategory+" "+f.power+" "+f.series).toUpperCase().indexOf(search)>=0);card.hidden=!ok;if(ok)visible++;});var n=q("#wep-result-count");if(n){n.textContent=visible;if(n.nextSibling)n.nextSibling.textContent=visible===1?" product family":" product families"}}'+
+      'function drawCompare(){var selected=compare.map(function(k){return byKey[k]}).filter(Boolean);var labels=[];selected.forEach(function(f){Object.keys(f.specs||{}).forEach(function(k){if(labels.indexOf(k)<0)labels.push(k)})});var html="<div class=\\\"wep-compare-table-wrap\\\"><table class=\\\"wep-compare-table\\\"><thead><tr><th>Feature</th>"+selected.map(function(f){return "<th>"+esc(f.name)+"</th>"}).join("")+"</tr></thead><tbody><tr><th>Starting Price</th>"+selected.map(function(f){return "<td>"+(Number(f.minPrice||0)>0?m(f.minPrice):"Pricing Coming Soon")+"</td>"}).join("")+"</tr><tr><th>Power</th>"+selected.map(function(f){return "<td>"+esc(f.power)+"</td>"}).join("")+"</tr><tr><th>Type</th>"+selected.map(function(f){return "<td>"+esc(f.subcategory)+"</td>"}).join("")+"</tr><tr><th>Availability</th>"+selected.map(function(f){return "<td>"+((f.normalLocations&&f.normalLocations.length)?"Normally Stocked in "+f.normalLocations.join(" and "):"Available to Order")+"</td>"}).join("")+"</tr>"+labels.map(function(l){return "<tr><th>"+esc(l)+"</th>"+selected.map(function(f){return "<td>"+esc((f.specs||{})[l]||"&mdash;")+"</td>"}).join("")+"</tr>"}).join("")+"</tbody></table></div>";q("#wep-compare-table").innerHTML=html}'+
+      'function syncCompare(){var bar=q("#wep-compare-bar"),cnt=q("#wep-compare-count");if(cnt)cnt.textContent=compare.length;if(bar)bar.hidden=!compare.length;qa("[data-compare]").forEach(function(c){c.checked=compare.indexOf(c.dataset.compare)>=0})}'+
+      'qa("[data-filter-type]").forEach(function(b){b.onclick=function(){var value=b.dataset.filterType||"";type=type===value?"":value;qa("[data-filter-type]").forEach(function(x){x.classList.toggle("active",type!==""&&x.dataset.filterType===type)});subtype="";updateSubtypes();filters()}});qa("[data-filter-power]").forEach(function(b){b.onclick=function(){var value=b.dataset.filterPower||"";power=power===value?"":value;qa("[data-filter-power]").forEach(function(x){x.classList.toggle("active",power!==""&&x.dataset.filterPower===power)});filters()}});qa("[data-filter-series]").forEach(function(b){b.onclick=function(){var value=b.dataset.filterSeries||"";series=series===value?"":value;qa("[data-filter-series]").forEach(function(x){x.classList.toggle("active",series!==""&&x.dataset.filterSeries===series)});filters()}});'+
+      'q("#wep-smart-search").addEventListener("input",filters);q("#wep-stock-only").addEventListener("change",filters);'+
+      'document.addEventListener("click",function(e){var a=e.target&&e.target.closest?e.target.closest("a[data-wep-external=\\\"1\\\"]"):null;if(!a)return;var url=a.getAttribute("href")||"";if(!/^https?:\\/\\//i.test(url))return;e.preventDefault();openExternal(url)});'+
+      'qa(".wep-variant").forEach(function(s){s.addEventListener("change",function(){reTotal(s.dataset.family)});reTotal(s.dataset.family)});'+
+      'qa("[data-add-cart]").forEach(function(b){b.addEventListener("click",function(){addMainToCart(b.dataset.addCart)})});'+
+      'qa("[data-component-cart]").forEach(function(b){b.addEventListener("click",function(){var sku=b.dataset.componentCart,qty=q("[data-component-qty=\\\""+CSS.escape(sku)+"\\\"]");addComponentToCart(sku,qty?qty.value:1)})});'+
+      'qa("[data-compare]").forEach(function(c){c.addEventListener("change",function(){var k=c.dataset.compare;if(c.checked){if(compare.length>=4){c.checked=false;alert("Compare up to 4 products at a time.");return}if(compare.indexOf(k)<0)compare.push(k)}else compare=compare.filter(function(x){return x!==k});syncCompare()})});'+
+      'q("#wep-clear-compare").onclick=function(){compare=[];syncCompare()};q("#wep-open-compare").onclick=function(){drawCompare();var d=q("#wep-compare-dialog");if(d.showModal)d.showModal();else d.setAttribute("open","")};'+
+      'qa("a[data-options]").forEach(function(a){var u=new URL(a.getAttribute("href"),location.href);if(!u.searchParams.has("return"))u.searchParams.set("return",location.href);a.href=u.href});filters();syncCompare();'+
+    '})()<'+ '/script>'+iframeResizeScript();
+  }
+  function enhanceGeneratedPage(){
+    var enabled=document.getElementById('stihl-webpage-smart-catalog');
+    if(enabled && !enabled.checked) return;
+    var textarea=document.getElementById('stihl-webpage-code');
+    if(!textarea || !clean(textarea.value)) return;
+    if(textarea.value.indexOf('id="wep-smart-catalog"')>=0) return;
+    if(typeof window.webpageProducts !== 'function') return;
+    var category=clean(document.getElementById('stihl-webpage-category') && document.getElementById('stihl-webpage-category').value) || 'Equipment';
+    var products=window.webpageProducts().filter(function(item){
+      return clean(item.Category).toLowerCase()===category.toLowerCase();
+    });
+    if(!products || !products.length) return;
+    var data=pageData(products);
+    var insertion=smartCss()+renderSmartMarkup(data,category)+runtimeScript(data)+accessoryScript();
+    var marker='</div>';
+    var pos=textarea.value.lastIndexOf(marker);
+    textarea.value = pos>=0
+      ? textarea.value.slice(0,pos)+insertion+textarea.value.slice(pos)
+      : textarea.value+insertion;
+    var status=document.getElementById('stihl-webpage-status');
+    if(status){
+      status.className='stihl-success';
+      status.textContent='Interactive webpage ready: '+data.families.length+' product families from '+products.length+' SKUs, with filters, compare, and battery/charger options.';
+    }
+  }
+  function installBuilderControl(){
+    var filter=document.getElementById('stihl-webpage-filter');
+    if(!filter || document.getElementById('stihl-webpage-smart-catalog')) return;
+    var host=filter.closest('div') || filter.parentNode;
+    var wrap=document.createElement('div');
+    wrap.style.gridColumn='1/-1';
+    wrap.innerHTML='<label style="display:flex;gap:9px;align-items:center;padding:10px 12px;border:1px solid #ddd;border-radius:9px;background:#fff8ef;"><input id="stihl-webpage-smart-catalog" type="checkbox" checked style="width:auto;"> <span><strong>Interactive product catalog</strong><br><small>Group SKUs into product families and add filters, variants, compare and battery/charger options.</small></span></label>';
+    host.parentNode.insertBefore(wrap,host.nextSibling);
+  }
+  function wire(){
+    installBuilderControl();
+    var gen=document.getElementById('stihl-generate-webpage');
+    if(gen && !gen.dataset.smartCatalogWired){
+      gen.dataset.smartCatalogWired='1';
+      gen.addEventListener('click',function(){ setTimeout(enhanceGeneratedPage,0); });
+    }
+    var open=document.getElementById('stihl-build-webpages');
+    if(open && !open.dataset.smartCatalogWired){
+      open.dataset.smartCatalogWired='1';
+      open.addEventListener('click',function(){ setTimeout(installBuilderControl,0); });
+    }
+  }
+  api.familyName=familyName;
+  api.variantBaseLabel=variantBaseLabel;
+  api.groupProducts=groupProducts;
+  api.buildGeneratedCatalog=function(products,category){
+    var selected=clean(category);
+    var isBatterySeriesPage=/^(AS|AK|AP|AR) Battery System$/i.test(selected);
+    var scoped=(products||[]).filter(function(item){
+      return isBatterySeriesPage || !selected ||
+        clean(item.Category).toLowerCase()===selected.toLowerCase();
+    });
+    var data=pageData(scoped);
+    if(!data.families.length) return '';
+    return smartCss()+renderSmartMarkup(data,clean(category)||'Equipment')+runtimeScript(data)+accessoryScript();
+  };
+  api.enhanceGeneratedPage=enhanceGeneratedPage;
+  api.install=wire;
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',wire);
+  else wire();
+})();
+
+
+
+
+
