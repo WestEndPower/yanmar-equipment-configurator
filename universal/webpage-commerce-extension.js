@@ -789,11 +789,69 @@
   }
 
   function renderCardSpecs(f){
+    var isYanmarTractor =
+      activeBrandId()==='YANMAR' &&
+      clean(f.category).toLowerCase()==='compact tractors';
+
+    var values=f.specs||{};
+
+    if(isYanmarTractor){
+      var tractorSpecs=[];
+
+      function addSpec(label,value){
+        value=clean(value);
+
+        if(!value) return;
+
+        tractorSpecs.push(
+          '<div class="wep-spec-tile">'+
+            '<span class="wep-spec-copy">'+
+              '<span class="wep-spec-label">'+esc(label)+'</span>'+
+              '<strong>'+esc(value)+'</strong>'+
+            '</span>'+
+          '</div>'
+        );
+      }
+
+      addSpec(
+        'Gross HP',
+        values['Gross Engine Power'] || ''
+      );
+
+      addSpec(
+        'PTO HP',
+        values['PTO Power'] || ''
+      );
+
+      addSpec(
+        'Engine',
+        values['Engine'] || ''
+      );
+
+      addSpec(
+        '3-Point Hitch',
+        values['3-Point Hitch'] || ''
+      );
+
+      /*
+       * Some Yanmar families have populated Weight,
+       * while others do not. Show it only when available.
+       */
+      addSpec(
+        'Weight',
+        values['Weight'] || ''
+      );
+
+      return tractorSpecs.length
+        ? '<div class="wep-spec-strip">'+
+            tractorSpecs.slice(0,4).join('')+
+          '</div>'
+        : '';
+    }
+
     var wanted=clean(f.category).toLowerCase()==='blowers'
       ? ['Weight','Max. Air Velocity','Air Volume','Blowing Force']
       : [];
-
-    var values=f.specs||{};
 
     var items=wanted.map(function(label){
       var value=clean(values[label]);
@@ -920,6 +978,7 @@
             '</a>'+
           '</div>'+
           (
+            !isYanmarTractor &&
             first.details && /^https?:\/\//i.test(first.details)
               ? '<a class="wep-external-details" href="'+esc(first.details)+'" '+
                 'data-product-details="'+esc(f.key)+'" data-wep-external="1" '+
@@ -1365,6 +1424,8 @@
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',wire);
   else wire();
 })();
+
+
 
 
 
