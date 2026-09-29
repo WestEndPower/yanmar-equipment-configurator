@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en" data-configurator-brand="YANMAR">
 <head>
   <!-- =========================================================
@@ -5588,9 +5588,7 @@ function requestPublicPromoFinancePricing(
             : 0;
 
         const customerFee =
-          money(
-            protectedProgram.CustomerOriginationFee
-          );
+          financeProgramCustomerApplicationFee(protectedProgram);
 
         const amountFinanced =
           taxableSubtotal +
@@ -6579,9 +6577,11 @@ Brand: clean(program.BrandID),
   Label: clean(program.ProgramName),
 
   ApplicationFee:
-    clean(program.FinanceType).toUpperCase() === 'REVOLVING'
-      ? clean(program.CustomerOriginationFee)
-      : clean(program.UCCFilingFee),
+    clean(program.BrandID).toUpperCase() === 'YANMAR'
+      ? 299
+      : clean(program.FinanceType).toUpperCase() === 'REVOLVING'
+        ? clean(program.CustomerOriginationFee)
+        : clean(program.UCCFilingFee),
 
   MinimumDownAmount:
     clean(program.MinDownAmount),
@@ -11635,6 +11635,46 @@ sendQuoteLead(
 
 }
 
+function financeProgramCustomerApplicationFee(program){
+  if(!program) return 0;
+
+  // All current Yanmar Vibrant plans have a $299 customer bank fee.
+  // The public eligibility response can omit the private fee columns.
+  if(configuratorBrandId() === 'YANMAR') return 299;
+
+  // Installment plans use the UCC filing fee; revolving plans use
+  // the customer origination fee, matching the quote financing flow.
+  const fee = clean(program.FinanceType).toUpperCase() === 'REVOLVING'
+    ? program.CustomerOriginationFee
+    : program.UCCFilingFee;
+
+  return money(clean(fee) !== '' ? fee : program.ApplicationFee);
+}
+
+function priceTagMinimumDown(program, purchaseTotal){
+  const fixed = money(
+    program.MinimumDown ||
+    program.MinimumDownAmount ||
+    program.MinimumDownPayment ||
+    program.MinDownAmount
+  );
+  const rawPercent = money(
+    program.MinimumDownPercent || program.MinDownPercent
+  );
+  const percent = rawPercent > 0 && rawPercent < 1
+    ? rawPercent * 100
+    : rawPercent;
+
+  if(fixed > 0) return Math.min(fixed, purchaseTotal);
+  if(percent > 0){
+    return Math.min(
+      Math.ceil(purchaseTotal * percent / 100 / 10) * 10,
+      purchaseTotal
+    );
+  }
+  return 0;
+}
+
 function priceTagFreightForTool(tool){
 
   if(!tool){
@@ -12040,15 +12080,17 @@ async function buildPriceTagData(tool){
   const financePrograms = eligibleFinancePrograms
     .filter(program =>
       money(program.APR) === 0 &&
-      money(program.MinDownAmount || program.MinimumDownAmount) === 0 &&
-      money(program.MinDownPercent || program.MinimumDownPercent) === 0 &&
       isDateActive(program.StartDate, program.EndDate)
     )
     .sort((a, b) =>
       Number(clean(b.TermMonths)) - Number(clean(a.TermMonths)) ||
       compareFinancePrograms(a, b)
     )
-    .slice(0, 3);
+    .slice(0, 3)
+    .sort((a, b) =>
+      Number(clean(a.TermMonths)) - Number(clean(b.TermMonths)) ||
+      compareFinancePrograms(a, b)
+    );
 
   const financeOffers = await Promise.all(financePrograms.map(async financeProgram => {
 
@@ -12097,14 +12139,14 @@ async function buildPriceTagData(tool){
         : 0;
 
     const applicationFee =
-      money(
-        financeProgram.CustomerOriginationFee
-      );
+      financeProgramCustomerApplicationFee(financeProgram);
 
-    const amountFinanced =
-      financeTaxableSubtotal +
-      financeTax +
-      applicationFee;
+    const purchaseOutTheDoor =
+      financeTaxableSubtotal + financeTax;
+    const minimumDown =
+      priceTagMinimumDown(financeProgram, purchaseOutTheDoor);
+    const outTheDoor = purchaseOutTheDoor;
+    const amountFinanced = outTheDoor - minimumDown;
 
     const termMonths =
       Number(
@@ -12126,7 +12168,7 @@ async function buildPriceTagData(tool){
 
     const monthly =
       monthlyPayment(
-        amountFinanced,
+        amountFinanced + applicationFee,
         apr,
         termMonths
       );
@@ -12141,6 +12183,8 @@ async function buildPriceTagData(tool){
       tax: financeTax,
       applicationFee,
       customerAdjustment,
+      outTheDoor,
+      minimumDown,
       amountFinanced,
       termMonths,
       apr,
@@ -12148,7 +12192,7 @@ async function buildPriceTagData(tool){
     };
   }));
 
-  const finance = financeOffers[0] || null;
+  const finance = financeOffers[financeOffers.length - 1] || null;
 
   const validThrough =
     earliestPromoDateLabel(
@@ -12393,12 +12437,15 @@ const qrCodeURL =
     title,
     badge,
     price,
+    priceNote,
     rebate,
     discount,
     freight,
     tax,
     totalLabel,
     total,
+    minimumDown,
+    amountFinanced,
     financeDetails
   }){
 
@@ -12416,6 +12463,7 @@ const qrCodeURL =
         <div class="tag-option-price">
           ${escapeHtml(price)}
         </div>
+        <div class="tag-price-note">${priceNote ? escapeHtml(priceNote) : '&nbsp;'}</div>
 
         <div class="tag-lines">
 
@@ -12451,6 +12499,17 @@ const qrCodeURL =
             <span>${fmtMoney(total)}</span>
           </div>
 
+          ${amountFinanced !== undefined ? `
+            <div class="tag-line">
+              <span>Minimum Down</span>
+              <span>${minimumDown > 0 ? `-${fmtMoney(minimumDown)}` : fmtMoney(0)}</span>
+            </div>
+            <div class="tag-line tag-financed">
+              <span>Amount Financed</span>
+              <span>${fmtMoney(amountFinanced)}</span>
+            </div>
+          ` : ''}
+
         </div>
 
         ${financeDetails || ''}
@@ -12466,8 +12525,9 @@ const qrCodeURL =
       badge: 'Best Price',
       price:
         fmtMoney(
-          data.cash.sellingPrice
+          data.cash.sellingPrice + data.freight
         ),
+      priceNote: '+ tax',
       rebate:
         data.customerRebate,
       discount:
@@ -12489,8 +12549,9 @@ const qrCodeURL =
       badge: 'Pay Today',
       price:
         fmtMoney(
-          data.credit.sellingPrice
+          data.credit.sellingPrice + data.freight
         ),
+      priceNote: '+ tax',
       rebate:
         data.customerRebate,
       discount:
@@ -12524,8 +12585,12 @@ const qrCodeURL =
           tax:
             finance.tax,
           totalLabel:
-            'Amount Financed*',
+            'Out-the-Door',
           total:
+            finance.outTheDoor,
+          minimumDown:
+            finance.minimumDown,
+          amountFinanced:
             finance.amountFinanced,
           financeDetails: ''
         });
@@ -12703,15 +12768,9 @@ const warrantyHtml =
     : '';
 
   const financeFootnote = financeOffers.length
-    ? `<div class="tag-footnote">${financeOffers.map(offer => `
-        <div><strong>0% for ${offer.termMonths} Months*:</strong>
-          Bank application fee: ${fmtMoney(offer.applicationFee)}.
-          Bank fee is included in the amount financed.
-          ${offer.termMonths} monthly payments. Subject to credit approval.
-          ${offer.rebateCompatible
-            ? 'Factory rebate and financing may be combined.'
-            : 'Factory rebate cannot be combined with this financing program.'}
-        </div>`).join('')}</div>`
+    ? `<div class="tag-footnote">
+        * Vibrant: ${fmtMoney(financeOffers[0].applicationFee)} bank application fee on all programs; included in monthly payments, excluded from totals above. Subject to credit approval; 0% offers cannot combine with factory rebate.
+      </div>`
     : '';
 
   printWindow.document.open();
@@ -13051,6 +13110,15 @@ const warrantyHtml =
   color:#c00000;
 }
 
+        .tag-price-note{
+          min-height:14px;
+          margin:-6px 0 5px;
+          text-align:center;
+          font-size:10px;
+          font-weight:700;
+          white-space:nowrap;
+        }
+
         .tag-line{
           display:flex;
           justify-content:space-between;
@@ -13074,12 +13142,19 @@ const warrantyHtml =
           font-weight:900;
         }
 
+        .tag-financed{
+          font-weight:900;
+          border-top:1px solid #111;
+        }
+
         .tag-footnote{
           margin:0 16px;
           padding:5px 0;
           border-top:1px solid #bbb;
-          font-size:10px;
+          font-size:9px;
           font-weight:700;
+          text-align:center;
+          white-space:nowrap;
         }
 
         .tag-footer{
