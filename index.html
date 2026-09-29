@@ -1892,7 +1892,7 @@ body.dealer-mode .dealer-only{
 </button>
 
 <details class="stihl-more-actions">
-  <summary class="stihl-btn light">More Actions â–¾</summary>
+  <summary class="stihl-btn light">More Actions ▾</summary>
   <div class="stihl-more-actions-menu">
     <button class="stihl-btn light dealer-only" id="stihl-dealer-print" type="button">
       Dealer Worksheet
@@ -3054,7 +3054,7 @@ return `
         font-size:15px;
         font-weight:900;
       ">
-        Bid / Fleet Detail â€” Dealer Use Only
+        Bid / Fleet Detail — Dealer Use Only
       </div>
 
       <div style="padding:8px 12px;font-size:12px;">
@@ -3120,7 +3120,7 @@ function dealerKitBreakdownPrintHtml(){
     blocks.push(`
       <div style="margin-top:18px;border:2px solid #1f7a3a;border-radius:10px;overflow:hidden;page-break-inside:avoid;">
         <div style="background:#1f7a3a;color:#fff;padding:8px 12px;font-size:15px;font-weight:900;">
-          Dealer Kit Breakdown â€” ${escapeHtml(clean(line.item.Model) || skuOf(line.item))}
+          Dealer Kit Breakdown — ${escapeHtml(clean(line.item.Model) || skuOf(line.item))}
         </div>
 
         <table style="width:100%;border-collapse:collapse;font-size:10.5px;">
@@ -3869,7 +3869,7 @@ function populateBidFleetPrograms(){
 
         return `
           <option value="${escapeHtml(clean(program.ProgramID))}">
-            ${escapeHtml(clean(program.ProgramName))} â€” ${fmtMoney(amount)}
+            ${escapeHtml(clean(program.ProgramName))} — ${fmtMoney(amount)}
           </option>
         `;
       })
@@ -5805,7 +5805,7 @@ const offerColumns =
       line-height:1.2;
     ">
       Current Factory Offers${offerDate
-        ? ` â€¢ Valid Through ${escapeHtml(offerDate)}`
+        ? ` • Valid Through ${escapeHtml(offerDate)}`
         : ''}
     </div>
 
@@ -9176,7 +9176,7 @@ function openOnlineOrderModal(item){
             line-height:1;
             cursor:pointer;
           ">
-          Ã—
+          ×
         </button>
 
         <div style="
@@ -10156,7 +10156,7 @@ ${transitText ? `
           color:#222;
           margin-bottom:8px;
         ">
-          Important â€” Please Confirm Before Ordering
+          Important — Please Confirm Before Ordering
         </div>
 
         <div style="
@@ -10600,7 +10600,7 @@ function renderAvailability(item){
          href="https://www.google.com/maps/search/?api=1&query=West+End+Power+Equipment+265+Danbury+Road+New+Milford+CT+06776"
          target="_blank"
          rel="noopener"
-         data-tooltip="West End Power Equipment&#10;265 Danbury Road&#10;New Milford, CT 06776&#10;&#10;Sales â€¢ Parts â€¢ Service&#10;&#10;Click for directions">
+         data-tooltip="West End Power Equipment&#10;265 Danbury Road&#10;New Milford, CT 06776&#10;&#10;Sales • Parts • Service&#10;&#10;Click for directions">
          New Milford
       </a>
     `);
@@ -10612,7 +10612,7 @@ function renderAvailability(item){
         href="https://www.google.com/maps/search/?api=1&query=West+End+Power+Equipment+56+Beaver+Brook+Road+Danbury+CT+06810"
          target="_blank"
          rel="noopener"
-         data-tooltip="West End Power Equipment&#10;56 Beaver Brook Road&#10;Danbury, CT 06810&#10;&#10;Sales â€¢ Parts â€¢ Service&#10;&#10;Click for directions">
+         data-tooltip="West End Power Equipment&#10;56 Beaver Brook Road&#10;Danbury, CT 06810&#10;&#10;Sales • Parts • Service&#10;&#10;Click for directions">
          Danbury
       </a>
     `);
@@ -10644,7 +10644,7 @@ function renderAvailability(item){
       color:#1f7a3a;
       margin-bottom:${note ? '8px' : '0'};
     ">
-      âœ“ Normally Stocked In: ${stores.join(' & ')}
+      ✓ Normally Stocked In: ${stores.join(' & ')}
     </div>
 
     ${note ? `
@@ -10774,7 +10774,7 @@ const printFinanceProgram =
     printedSaleRecord.status === 'deposit'
       ? 'Deposit Receipt'
       : printedSaleRecord.status === 'paid'
-        ? 'Sales Order â€” Paid in Full'
+        ? 'Sales Order — Paid in Full'
         : 'Customer Quote';
 
   const paymentRecordBlock =
@@ -10837,13 +10837,13 @@ const printFinanceProgram =
                           'T00:00:00'
                         ).toLocaleDateString()
                       )
-                    : 'â€”'}
+                    : '—'}
                 </td>
 
                 <td>
                   ${printedSaleRecord.reference
                     ? escapeHtml(printedSaleRecord.reference)
-                    : 'â€”'}
+                    : '—'}
                 </td>
 
                 <td style="
@@ -10999,7 +10999,7 @@ const packageBucketRows = packageBuckets.map(child => {
   const replacementText =
     tightSku(bucketSku) !== tightSku(child.replacementBaseSku) &&
     clean(child.replacementBaseSku)
-      ? ` â€” Replaces ${clean(child.replacementBaseSku)}`
+      ? ` — Replaces ${clean(child.replacementBaseSku)}`
       : '';
   const bucketDescription = nameOf(child.item) + replacementText;
   const bucketMsrp = priceOf(child.item) * bucketQty;
@@ -11483,7 +11483,7 @@ ${isDealer ? dealerKitBreakdownPrintHtml() : ''}
     <div>
       Terms:
       <strong>
-        ${money(printFinanceProgram.APR)}% APR â€¢
+        ${money(printFinanceProgram.APR)}% APR •
         ${escapeHtml(clean(printFinanceProgram.TermMonths))} months
       </strong>
     </div>
@@ -12243,7 +12243,7 @@ function priceTagBatteryChargeTime(
   chargerCode
 ){
   if(!battery || !chargerCode){
-    return 'â€”';
+    return '—';
   }
 
   const wanted =
@@ -12283,7 +12283,7 @@ function priceTagBatteryChargeTime(
     }
   }
 
-  return 'â€”';
+  return '—';
 }
 
 async function printPriceTag(printWindowOverride = null){
@@ -12659,7 +12659,7 @@ const kitPerformanceHtml =
             </div>
           ` : ''}
 
-          ${kitChargeTime && kitChargeTime !== 'â€”' ? `
+          ${kitChargeTime && kitChargeTime !== '—' ? `
             <div class="tag-kit-item">
               <span>Charge to 80% / 100%</span>
               <strong>
@@ -15948,7 +15948,7 @@ function renderFinancingOptions(){
     const monthlyText =
       protectedPricing &&
       visibleCartLineCount <= 1
-        ? ` â€¢ ${fmtMoney(
+        ? ` • ${fmtMoney(
             protectedPricing.monthly
           )}/mo`
         : "";
@@ -15968,16 +15968,16 @@ function renderFinancingOptions(){
     const scoreText = scoreIsEntered
       ? ''
       : scoreMin > 0 && scoreMax > 0
-        ? ` â€¢ Score ${scoreMin}-${scoreMax}`
+        ? ` • Score ${scoreMin}-${scoreMax}`
         : scoreMin > 0
-          ? ` â€¢ Score ${scoreMin}+`
+          ? ` • Score ${scoreMin}+`
           : scoreMax > 0
-            ? ` â€¢ Score up to ${scoreMax}`
+            ? ` • Score up to ${scoreMax}`
             : '';
 
     return `
       <option value="${escapeHtml(id)}">
-        ${money(p.APR)}% APR â€¢ ${clean(p.TermMonths)} mo${monthlyText}${scoreText}
+        ${money(p.APR)}% APR • ${clean(p.TermMonths)} mo${monthlyText}${scoreText}
       </option>
     `;
   };
@@ -16158,7 +16158,7 @@ function chooseToolInventoryMode(tool, requestedQuantity){
               ? `Serial ${escapeHtml(selectedSerialNumber)}`
               : 'Serial number not entered'}
             ${selectedInventoryId
-              ? ` â€¢ Inventory ID ${escapeHtml(selectedInventoryId)}`
+              ? ` • Inventory ID ${escapeHtml(selectedInventoryId)}`
               : ''}
           </p>
         ` : ''}
@@ -16557,7 +16557,7 @@ function renderPartOptions(){
     '<option value="">Choose compatible part</option>' +
     compatibleParts.map(part => `
       <option value="${escapeHtml(skuOf(part))}">
-        ${escapeHtml(nameOf(part))} â€” ${fmtMoney(priceOf(part))}
+        ${escapeHtml(nameOf(part))} — ${fmtMoney(priceOf(part))}
       </option>
     `).join('');
 }
@@ -16581,7 +16581,7 @@ function renderPartOptions(){
     batteries.map(battery => {
 
       const runtime = state.selectedTool
-        ? ' â€” Runtime: ' +
+        ? ' — Runtime: ' +
           runtimeText(
             state.selectedTool,
             clean(battery.BatteryID) || skuOf(battery)
@@ -16590,7 +16590,7 @@ function renderPartOptions(){
 
       return `
         <option value="${escapeHtml(skuOf(battery))}">
-          ${escapeHtml(nameOf(battery))} â€”
+          ${escapeHtml(nameOf(battery))} —
           ${fmtMoney(priceOf(battery))}
           ${escapeHtml(runtime)}
         </option>
@@ -16600,7 +16600,7 @@ function renderPartOptions(){
 
     function renderChargerOptions(){
       const chargers = compatibleChargers(state.selectedTool);
-      $('stihl-charger-select').innerHTML = '<option value="">Choose charger</option>' + chargers.map(c => `<option value="${escapeHtml(skuOf(c))}">${escapeHtml(nameOf(c))} â€” ${fmtMoney(priceOf(c))}</option>`).join('');
+      $('stihl-charger-select').innerHTML = '<option value="">Choose charger</option>' + chargers.map(c => `<option value="${escapeHtml(skuOf(c))}">${escapeHtml(nameOf(c))} — ${fmtMoney(priceOf(c))}</option>`).join('');
     }
 
 function compatibilityKey(v){
@@ -17183,7 +17183,7 @@ function updateCartLineQuantity(cartIndex, nextQty){
         <option value="${escapeHtml(
           'accessory|' + skuOf(accessory)
         )}">
-          ${escapeHtml(nameOf(accessory))} â€”
+          ${escapeHtml(nameOf(accessory))} —
           ${fmtMoney(priceOf(accessory))}
         </option>
       `)
@@ -17244,7 +17244,7 @@ function updateCartLineQuantity(cartIndex, nextQty){
         <option value="${escapeHtml(
           'variant-index|' + state.attachments.indexOf(attachment)
         )}">
-          ${escapeHtml(nameOf(attachment))} â€”
+          ${escapeHtml(nameOf(attachment))} —
           ${fmtMoney(priceOf(attachment))}
         </option>
       `)
@@ -17359,7 +17359,7 @@ const rows = state.kmaRuntimes.filter(row =>
     : '';
 
   if(!isTrue(r[`${code}_Compatible`]) && !low && !high && !note){
-    return `<td style="${includedStyle}">â€”</td>`;
+    return `<td style="${includedStyle}">—</td>`;
   }
 
   let runtime = 'Varies';
@@ -17841,7 +17841,7 @@ function printRuntimeChart(){
   identification.textContent =
     'Model: ' +
     clean(tool.Model) +
-    ' â€¢ SKU #: ' +
+    ' • SKU #: ' +
     (
       clean(tool.StihlID) ||
       skuOf(tool)
@@ -17927,7 +17927,7 @@ function renderWeightOptions(tool){
   if(!batteryCodes.length) return '';
 
   function batteryChargeCost(battery){
-    if(!battery) return 'â€”';
+    if(!battery) return '—';
 
     const direct =
       clean(battery.CostToCharge) ||
@@ -17942,7 +17942,7 @@ function renderWeightOptions(tool){
       battery.WattHoursCapacity
     );
 
-    if(!wh) return 'â€”';
+    if(!wh) return '—';
 
     const cost =
       (wh / 1000) *
@@ -17952,7 +17952,7 @@ function renderWeightOptions(tool){
   }
 
   function batteryChargeTime(battery, chargerCode){
-    if(!battery || !chargerCode) return 'â€”';
+    if(!battery || !chargerCode) return '—';
 
     const wanted =
       clean(chargerCode).toUpperCase();
@@ -17979,11 +17979,11 @@ function renderWeightOptions(tool){
       if(time100) return time100;
     }
 
-    return 'â€”';
+    return '—';
   }
 
   function batteryCapacityText(battery){
-    if(!battery) return 'â€”';
+    if(!battery) return '—';
 
     const ah =
       clean(
@@ -17999,13 +17999,13 @@ function renderWeightOptions(tool){
         battery.WattHoursCapacity
       );
 
-    if(!ah && !wh) return 'â€”';
+    if(!ah && !wh) return '—';
 
-    return `${ah || 'â€”'} / ${wh || 'â€”'}`;
+    return `${ah || '—'} / ${wh || '—'}`;
   }
 
   function batteryRuntimeValue(code){
-    if(!tool || !code) return 'â€”';
+    if(!tool || !code) return '—';
 
     const low =
       clean(tool[code + 'RunTimeLow']);
@@ -18020,7 +18020,7 @@ function renderWeightOptions(tool){
     if(low) return low;
     if(high) return high;
 
-    return 'â€”';
+    return '—';
   }
 
   function operatingWeight(code){
@@ -18034,7 +18034,7 @@ function renderWeightOptions(tool){
       !Number.isFinite(toolWeight) ||
       !installedBatteryWeight
     ){
-      return 'â€”';
+      return '—';
     }
 
     return `${(
@@ -18207,7 +18207,7 @@ function renderWeightOptions(tool){
                 : '';
 
             const hasPublishedRuntime =
-  batteryRuntimeValue(code) !== 'â€”';
+  batteryRuntimeValue(code) !== '—';
 
 return `
   <tr data-has-runtime="${
@@ -18966,7 +18966,7 @@ function bidFleetLabel(){
 
   return `${clean(bidFleet.program.ProgramName)}${
     bidFleet.tier
-      ? ` â€¢ ${clean(bidFleet.tier)}`
+      ? ` • ${clean(bidFleet.tier)}`
       : ''
   }`;
 }
@@ -19037,36 +19037,36 @@ function approvalStatus(netMargin){
   const target = targetMarginPercent();
 
   if(netMargin >= target){
-    return 'âœ“ Approved';
+    return '✓ Approved';
   }
 
   if(netMargin >= target - 3){
-    return 'âš  Manager Review';
+    return '⚠ Manager Review';
   }
 
-  return 'âœ– Below Minimum';
+  return '✖ Below Minimum';
 }
 
 function profitMeter(netMargin){
   const target = targetMarginPercent();
 
   if(netMargin >= target + 7){
-    return 'â˜…â˜…â˜…â˜…â˜… Excellent';
+    return '★★★★★ Excellent';
   }
 
   if(netMargin >= target + 4){
-    return 'â˜…â˜…â˜…â˜… Strong';
+    return '★★★★ Strong';
   }
 
   if(netMargin >= target){
-    return 'â˜…â˜…â˜… Acceptable';
+    return '★★★ Acceptable';
   }
 
   if(netMargin >= target - 3){
-    return 'â˜…â˜… Manager Review';
+    return '★★ Manager Review';
   }
 
-  return 'â˜… Below Minimum';
+  return '★ Below Minimum';
 }
 
 function dealerRebateAmount(){
@@ -19996,12 +19996,12 @@ const replacementControls = inventoryRecordLocksLine(line)
               ))}"
               ${tightSku(skuOf(choice)) === tightSku(skuOf(child.item)) ? 'selected' : ''}>
               ${escapeHtml(nameOf(choice))}${child.included
-                ? ` â€” ${fmtMoney(priceOf(choice))} MSRP${(() => {
+                ? ` — ${fmtMoney(priceOf(choice))} MSRP${(() => {
                     const isStandard =
                       tightSku(skuOf(choice)) === tightSku(skuOf(baseItem));
 
                     if(isStandard){
-                      return ' â€” Standard Included';
+                      return ' — Standard Included';
                     }
 
                     const difference =
@@ -20009,16 +20009,16 @@ const replacementControls = inventoryRecordLocksLine(line)
                       (Number(child.qty) || 1);
 
                     if(difference > 0){
-                      return ` â€” Add ${fmtMoney(difference)}`;
+                      return ` — Add ${fmtMoney(difference)}`;
                     }
 
                     if(difference < 0){
-                      return ` â€” Save ${fmtMoney(Math.abs(difference))}`;
+                      return ` — Save ${fmtMoney(Math.abs(difference))}`;
                     }
 
-                    return ' â€” No Price Change';
+                    return ' — No Price Change';
                   })()}`
-                : ` â€” ${fmtMoney(priceOf(choice))}`}
+                : ` — ${fmtMoney(priceOf(choice))}`}
             </option>
           `).join('')}
         </select>
@@ -20244,7 +20244,7 @@ const packageFreightNotice =
                     <strong style="text-align:right;white-space:nowrap;">
                       ${c.included
                         ? /^BBUCKET\d+/.test(tightSku(skuOf(c.item)))
-                          ? `${fmtMoney(priceOf(c.item) * (Number(c.qty) || 1))} MSRP â€¢ Included${
+                          ? `${fmtMoney(priceOf(c.item) * (Number(c.qty) || 1))} MSRP • Included${
                               money(c.replacementPriceAdjustment) > 0
                                 ? ` (+${fmtMoney(c.replacementPriceAdjustment)} package change)`
                                 : money(c.replacementPriceAdjustment) < 0
@@ -20441,7 +20441,7 @@ ${packageFreightNotice ? `
                 cursor:pointer;
                 line-height:1;
               ">
-              Ã—
+              ×
             </button>
 
             ${inventoryRecordLocksLine(line) ? `
@@ -20451,7 +20451,7 @@ ${packageFreightNotice ? `
                 font-size:11px;
                 font-weight:900;
               ">
-                In-stock configured unit â€” only 1 available at this price.
+                In-stock configured unit — only 1 available at this price.
                 Included equipment cannot be changed.
                 ${document.body.classList.contains('dealer-mode') && selectedInventoryRecord ? `
                   <span style="display:block;margin-top:3px;">
@@ -20459,7 +20459,7 @@ ${packageFreightNotice ? `
                       ? `Serial ${escapeHtml(clean(selectedInventoryRecord.SerialNumber))}`
                       : 'Serial number not entered'}
                     ${clean(selectedInventoryRecord.InventoryID)
-                      ? ` â€¢ Inventory ID ${escapeHtml(clean(selectedInventoryRecord.InventoryID))}`
+                      ? ` • Inventory ID ${escapeHtml(clean(selectedInventoryRecord.InventoryID))}`
                       : ''}
                   </span>
                 ` : ''}
@@ -21345,7 +21345,7 @@ if(fleetMsg){
     handheldText = 'Tier 2 Qualified';
   }else if(handheldTier1Qualified){
     handheldText =
-      `Tier 1 Qualified â€¢ Add ${fmtMoney(Math.max(0, tier2Handheld - handheldTotal))} for Tier 2`;
+      `Tier 1 Qualified • Add ${fmtMoney(Math.max(0, tier2Handheld - handheldTotal))} for Tier 2`;
   }else{
     handheldText =
       `Add ${fmtMoney(Math.max(0, tier1Handheld - handheldTotal))} for Tier 1`;
@@ -21359,7 +21359,7 @@ if(fleetMsg){
 
   zeroTurnText =
     needed > 0
-      ? `Tier 1 Qualified â€¢ Add ${needed} Zero-Turn${needed === 1 ? '' : 's'} for Tier 2`
+      ? `Tier 1 Qualified • Add ${needed} Zero-Turn${needed === 1 ? '' : 's'} for Tier 2`
       : 'Tier 2 Qualified';
 
 }else if(zeroTurnUnits <= 0){
@@ -21372,7 +21372,7 @@ if(fleetMsg){
 
 }else if(handheldTier1Qualified && zeroTurnUnits >= 1){
   zeroTurnText =
-    `Tier 1 Qualified â€¢ Add ${Math.max(0, tier2Units - zeroTurnUnits)} Zero-Turn${Math.max(0, tier2Units - zeroTurnUnits) === 1 ? '' : 's'} for Tier 2`;
+    `Tier 1 Qualified • Add ${Math.max(0, tier2Units - zeroTurnUnits)} Zero-Turn${Math.max(0, tier2Units - zeroTurnUnits) === 1 ? '' : 's'} for Tier 2`;
 
 }else{
   zeroTurnText =
@@ -23338,7 +23338,7 @@ function generateDealerSpikeWebpage(){
         : onOrderQuantity>0
           ? `${onOrderQuantity} currently on order`
           : normalStockLocations.length
-            ? `Normally stocked in ${normalStockLocations.join(' & ')} Ã¢â‚¬â€ contact us for estimated availability`
+            ? `Normally stocked in ${normalStockLocations.join(' & ')} — contact us for estimated availability`
             : 'Available to Order';
 
     const configure=
@@ -23557,7 +23557,7 @@ function generateDealerSpikeWebpage(){
         `<th scope="row">${escapeHtml(family.model)}</th>`+
         columns.map(column=>
           `<td data-label="${escapeHtml(column.label)}">`+
-          `${escapeHtml(column.value(representative)||'Ã¢â‚¬â€')}</td>`
+          `${escapeHtml(column.value(representative)||'—')}</td>`
         ).join('')+
         `<td data-label="Price"><strong>${startingPrice>0
           ? fmtMoney(startingPrice)
