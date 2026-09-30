@@ -3,49 +3,59 @@
 
   var api = window.WestEndWebCatalog = window.WestEndWebCatalog || {};
   var MAX_COMPARE = 4;
-  function activeBrandId(){
+
+  function clean(v){ return String(v == null ? '' : v).trim(); }
+
+  function activeManufacturerProfile(){
     try{
       if(
-        window.WestEndConfiguratorBrand &&
-        typeof window.WestEndConfiguratorBrand.getActiveBrandId === 'function'
+        window.WestEndBrandSettings &&
+        typeof window.WestEndBrandSettings.getActiveProfile === 'function'
       ){
-        return String(
-          window.WestEndConfiguratorBrand.getActiveBrandId(document) || 'YANMAR'
-        ).trim().toUpperCase();
+        return window.WestEndBrandSettings.getActiveProfile(document);
       }
     }catch(e){}
 
-    return String(
-      document.documentElement.dataset.configuratorBrand || 'YANMAR'
-    ).trim().toUpperCase();
+    return {
+      id:'STIHL',
+      name:'STIHL',
+      publicConfiguratorUrl:
+        'https://westendpower.github.io/stihl-battery-configurator/'
+    };
   }
 
   function publicConfiguratorBase(){
-    try{
-      if(
-        typeof window.WEBPAGE_PUBLIC_CONFIG_URL !== 'undefined' &&
-        window.WEBPAGE_PUBLIC_CONFIG_URL
-      ){
-        return String(window.WEBPAGE_PUBLIC_CONFIG_URL)
-          .replace(/\/?$/, '/');
-      }
-    }catch(e){}
+    var profile=activeManufacturerProfile();
 
-    var brand = activeBrandId();
+    var base=clean(
+      profile &&
+      profile.publicConfiguratorUrl
+    );
 
-    if(brand === 'YANMAR'){
-      return 'https://westendpower.github.io/yanmar-equipment-configurator/';
+    if(!base){
+      try{
+        if(
+          typeof window.WEBPAGE_PUBLIC_CONFIG_URL !== 'undefined' &&
+          window.WEBPAGE_PUBLIC_CONFIG_URL
+        ){
+          base=clean(
+            window.WEBPAGE_PUBLIC_CONFIG_URL
+          );
+        }
+      }catch(e){}
     }
 
-    if(brand === 'STIHL'){
-      return 'https://westendpower.github.io/stihl-battery-configurator/';
+    if(!base){
+      base=
+        location.origin +
+        location.pathname.replace(
+          /[^\/]*$/,
+          ''
+        );
     }
 
-    return location.origin +
-      location.pathname.replace(/[^\/]*$/, '');
+    return base.replace(/\/?$/,'/');
   }
-
-  function clean(v){ return String(v == null ? '' : v).trim(); }
   function money(v){
     var n = Number(v);
     return Number.isFinite(n) ? n : 0;
@@ -77,26 +87,11 @@
     return (m[1].toUpperCase() + ' ' + m[2].toUpperCase().replace(/\s+/g,' ')).trim();
   }
   function familyName(item){
-    if(
-      activeBrandId() === 'YANMAR' &&
-      clean(item && item.Category).toLowerCase() === 'compact tractors' &&
-      clean(item && item.Series)
-    ){
-      return clean(item.Series);
-    }
-
-    var model = clean(item && item.Model)
-      .replace(/^M3S\b/i,'MS')
-      .replace(/\s+/g,' ');
-
+    var model = clean(item && item.Model).replace(/^M3S\b/i,'MS').replace(/\s+/g,' ');
     var descCode = productCodeFromDescription(item);
-
     if(model) return model;
     if(descCode) return descCode;
-
-    return clean(item && item.Description) ||
-      clean(item && item.SKU) ||
-      'Product';
+    return clean(item && item.Description) || clean(item && item.SKU) || 'Product';
   }
   function familyKey(item){
     return norm(familyName(item));
@@ -108,23 +103,11 @@
     return m ? m[1] + '" Bar' : '';
   }
   function variantBaseLabel(item){
-    if(
-      activeBrandId() === 'YANMAR' &&
-      clean(item && item.Category).toLowerCase() === 'compact tractors'
-    ){
-      return clean(item && item.Model) ||
-        clean(item && item.SKU) ||
-        'Configuration';
-    }
-
     var bar = barLabel(item);
     if(bar) return bar;
-
     var pt = clean(item && item.ProductType).toLowerCase();
-
     if(pt === 'kit') return 'Package';
     if(pt === 'tool') return 'Tool Only';
-
     return clean(item && item.ProductType) || 'Standard';
   }
   function currentPrice(item){
@@ -204,6 +187,22 @@
     if(!ps.length || !os.length) return false;
     return ps.some(function(x){ return os.indexOf(x)>=0; });
   }
+  function extractMarketplaceValues(item,prefix,max){
+    var out=[];
+    for(var i=1;i<=max;i++){
+      var value=clean(item && item[prefix+i]);
+      if(value && out.indexOf(value)<0) out.push(value);
+    }
+    return out;
+  }
+
+  function addUniqueValues(target,values){
+    (values||[]).forEach(function(value){
+      if(value && target.indexOf(value)<0) target.push(value);
+    });
+    return target;
+  }
+
   function groupProducts(items){
     var map=new Map();
     (items||[]).forEach(function(item){
@@ -225,11 +224,23 @@
           stock:0,
           order:0,
           normalLocations:new Set(),
-          minPrice:Infinity
+          minPrice:Infinity,
+          topFilters:[],
+          sideFilters:[]
         });
       }
       var f=map.get(key);
       f.items.push(item);
+
+      addUniqueValues(
+        f.topFilters,
+        extractMarketplaceValues(item,'B',10)
+      );
+
+      addUniqueValues(
+        f.sideFilters,
+        extractMarketplaceValues(item,'F',10)
+      );
       f.stock += inStock(item);
       f.order += onOrder(item);
       normalStockLocations(item).forEach(function(location){f.normalLocations.add(location);});
@@ -272,6 +283,15 @@
           priceUrl:priceUrl(item),
           details:clean(item.ProductURL),
           specs:extractSpecs(item),
+
+          topFilters:extractMarketplaceValues(item,'B',10),
+          sideFilters:extractMarketplaceValues(item,'F',10),
+          factoryInstalled:extractMarketplaceValues(
+            item,
+            'FactoryInstalled',
+            3
+          ),
+
           productType:clean(item.ProductType),
           shipping:(clean(item.SKU)==='GA01 011 6911 US' && isTrue(item.ShippingEligible) &&
             [item.ShipWeight,item.ShipLength,item.ShipWidth,item.ShipHeight].every(function(x){return Number(x)>0;}))
@@ -629,27 +649,6 @@
     '</div>';
   }
   function renderFamilyPrices(f){
-    var isYanmarTractor =
-      activeBrandId()==='YANMAR' &&
-      clean(f.category).toLowerCase()==='compact tractors';
-
-    if(isYanmarTractor){
-      return '<div class="wep-price-lines">'+
-        '<div class="wep-price-choice">'+
-          '<div class="wep-price-heading">'+
-            '<span class="wep-price-label">Starting Price</span>'+
-            '<span class="wep-price-pair"><strong>'+
-              (
-                Number(f.minPrice||0)>0
-                  ? fmtMoney(f.minPrice)
-                  : 'Pricing Coming Soon'
-              )+
-            '</strong></span>'+
-          '</div>'+
-        '</div>'+
-      '</div>';
-    }
-
     var tool=f.variants.find(function(v){
       return !v.isKit && !v.isRecommendedPackage;
     });
@@ -789,69 +788,11 @@
   }
 
   function renderCardSpecs(f){
-    var isYanmarTractor =
-      activeBrandId()==='YANMAR' &&
-      clean(f.category).toLowerCase()==='compact tractors';
-
-    var values=f.specs||{};
-
-    if(isYanmarTractor){
-      var tractorSpecs=[];
-
-      function addSpec(label,value){
-        value=clean(value);
-
-        if(!value) return;
-
-        tractorSpecs.push(
-          '<div class="wep-spec-tile">'+
-            '<span class="wep-spec-copy">'+
-              '<span class="wep-spec-label">'+esc(label)+'</span>'+
-              '<strong>'+esc(value)+'</strong>'+
-            '</span>'+
-          '</div>'
-        );
-      }
-
-      addSpec(
-        'Gross HP',
-        values['Gross Engine Power'] || ''
-      );
-
-      addSpec(
-        'PTO HP',
-        values['PTO Power'] || ''
-      );
-
-      addSpec(
-        'Engine',
-        values['Engine'] || ''
-      );
-
-      addSpec(
-        '3-Point Hitch',
-        values['3-Point Hitch'] || ''
-      );
-
-      /*
-       * Some Yanmar families have populated Weight,
-       * while others do not. Show it only when available.
-       */
-      addSpec(
-        'Weight',
-        values['Weight'] || ''
-      );
-
-      return tractorSpecs.length
-        ? '<div class="wep-spec-strip">'+
-            tractorSpecs.slice(0,4).join('')+
-          '</div>'
-        : '';
-    }
-
     var wanted=clean(f.category).toLowerCase()==='blowers'
       ? ['Weight','Max. Air Velocity','Air Volume','Blowing Force']
       : [];
+
+    var values=f.specs||{};
 
     var items=wanted.map(function(label){
       var value=clean(values[label]);
@@ -913,10 +854,6 @@
     var first=f.variants[0]||{};
     var specsHtml=renderCardSpecs(f);
 
-    var isYanmarTractor =
-      activeBrandId()==='YANMAR' &&
-      clean(f.category).toLowerCase()==='compact tractors';
-
     var description=[f.power,f.subcategory]
       .filter(Boolean)
       .map(esc)
@@ -927,9 +864,7 @@
       : '<div class="wep-smart-placeholder">Image Coming Soon</div>';
 
     var variantOptions=
-      '<option value="" selected disabled>'+
-        (isYanmarTractor ? 'Choose Configuration' : 'Choose Purchase Option')+
-      '</option>'+
+      '<option value="" selected disabled>Choose Purchase Option</option>'+
       f.variants.map(function(v,i){
         return '<option value="'+i+'">'+esc(v.label)+'</option>';
       }).join('');
@@ -977,15 +912,7 @@
               image+
             '</a>'+
           '</div>'+
-          (
-            !isYanmarTractor &&
-            first.details && /^https?:\/\//i.test(first.details)
-              ? '<a class="wep-external-details" href="'+esc(first.details)+'" '+
-                'data-product-details="'+esc(f.key)+'" data-wep-external="1" '+
-                'target="_blank" rel="noopener noreferrer">'+
-                'View Product Details <span aria-hidden="true">&nearr;</span></a>'
-              : ''
-          )+
+          (first.details && /^https?:\/\//i.test(first.details) ? '<a class="wep-external-details" href="'+esc(first.details)+'" data-product-details="'+esc(f.key)+'" data-wep-external="1" target="_blank" rel="noopener noreferrer">View Product Details <span aria-hidden="true">â†—</span></a>' : '')+
         '</section>'+
 
         '<section class="wep-card-buy">'+
@@ -993,57 +920,41 @@
           renderFamilyPrices(f)+
 
           '<div class="wep-config-row">'+
-            '<select aria-label="'+
-              (isYanmarTractor ? 'Choose Configuration' : 'Choose Purchase Option')+
-              '" class="wep-variant" data-family="'+esc(f.key)+'">'+
+            '<select aria-label="Choose Purchase Option" class="wep-variant" '+
+              'data-family="'+esc(f.key)+'">'+
               variantOptions+
             '</select>'+
-            (
-              isYanmarTractor
-                ? ''
-                : '<input aria-label="Quantity" class="wep-main-qty" type="number" min="1" max="99" value="1" data-main-qty="'+esc(f.key)+'">'
-            )+
+            '<input aria-label="Quantity" class="wep-main-qty" type="number" min="1" max="99" value="1" data-main-qty="'+esc(f.key)+'">'+
           '</div>'+
 
-          (
-            isYanmarTractor
-              ? '<div class="wep-smart-actions wep-two-actions">'+
-                  '<a href="'+esc(first.configure||'#')+'" '+
-                    'data-runtime="'+esc(f.key)+'">'+
-                    'Build &amp; Price'+
-                  '</a>'+
-                '</div>'
-              : '<div class="wep-smart-actions'+
-                  (clean(f.power).toUpperCase()==='BATTERY'
-                    ? ''
-                    : ' wep-two-actions')+
-                '">'+
+          '<div class="wep-smart-actions'+
+            (clean(f.power).toUpperCase()==='BATTERY'
+              ? ''
+              : ' wep-two-actions')+
+          '">'+
 
-                  '<a href="product-options.html?sku='+
-                    encodeURIComponent(first.sku)+
-                    '&category='+
-                    encodeURIComponent(f.category)+
-                    '" data-options="'+esc(f.key)+'">'+
-                    'View Options'+
-                  '</a>'+
+            '<a href="product-options.html?sku='+
+              encodeURIComponent(first.sku)+
+              '&category='+
+              encodeURIComponent(f.category)+
+              '" data-options="'+esc(f.key)+'">'+
+              'View Options'+
+            '</a>'+
 
-                  (
-                    clean(f.power).toUpperCase()==='BATTERY'
-                      ? '<a href="'+esc(first.configure||'#')+'" '+
-                        'data-runtime="'+esc(f.key)+'">'+
-                        'Run/Charge Times'+
-                        '</a>'
-                      : ''
-                  )+
-
-                  '<button class="wep-add-cart" type="button" '+
-                    'data-add-cart="'+esc(f.key)+'">'+
-                    cartIcon+
-                    '<span>Add to Cart</span>'+
-                  '</button>'+
-                '</div>'
-          )+
-
+            (
+              clean(f.power).toUpperCase()==='BATTERY'
+                ? '<a href="'+esc(first.configure||'#')+'" '+
+                  'data-runtime="'+esc(f.key)+'">'+
+                  'Run/Charge Times'+
+                  '</a>'
+                : ''
+            )+
+            '<button class="wep-add-cart" type="button" '+
+              'data-add-cart="'+esc(f.key)+'">'+
+              cartIcon+
+              '<span>Add to Cart</span>'+
+            '</button>'+
+          '</div>'+
         '</section>'+
 
       '</div>'+
@@ -1102,7 +1013,6 @@
   }
   function renderSmartMarkup(data,category){
     var isSeriesPage=/^(AS|AK|AP|AR) Battery System$/i.test(clean(category));
-    var isYanmarTractorPage=activeBrandId()==='YANMAR' && clean(category).toLowerCase()==='compact tractors';
     var filterCategory=function(value){return clean(value).replace(/^Vauums$/i,'Vacuums');};
     var types=distinct(data.families.map(function(f){
       return isSeriesPage ? filterCategory(f.category) : f.subcategory;
@@ -1154,10 +1064,10 @@
       '</button>';
     }).join('');
     return '<section id="wep-smart-catalog" class="wep-smart-catalog" data-filter-scope="'+(isSeriesPage?'category':'subcategory')+'">'+
-      '<div class="wep-smart-heading"><p>'+ (isYanmarTractorPage?'Shop by series, availability or model.':(isSeriesPage?'Shop by category, availability or model.':'Shop by type, power source, availability or model.')) +'</p><h2>'+esc(category)+' &mdash; Filter, Compare &amp; Configure</h2></div>'+
+      '<div class="wep-smart-heading"><p>'+ (isSeriesPage?'Shop by category, availability or model.':'Shop by type, power source, availability or model.') +'</p><h2>'+esc(category)+' &mdash; Filter, Compare &amp; Configure</h2></div>'+
       accessoryMarkup(data,category)+
       '<div class="wep-smart-toolbar">'+
-        (isYanmarTractorPage?'':'<div'+(isSeriesPage?' class="wep-category-row"':'')+'><strong>'+(isSeriesPage?'Category':'Type')+'</strong><div class="wep-filter-buttons" id="wep-type-filters">'+typeButtons+'</div></div>')+ (isSeriesPage?'<div class="wep-subcategory-row" id="wep-subcategory-row" hidden><strong>Subcategory</strong><div class="wep-filter-buttons" id="wep-subcategory-filters"></div></div>':'')+
+        '<div'+(isSeriesPage?' class="wep-category-row"':'')+'><strong>'+(isSeriesPage?'Category':'Type')+'</strong><div class="wep-filter-buttons" id="wep-type-filters">'+typeButtons+'</div></div>'+ (isSeriesPage?'<div class="wep-subcategory-row" id="wep-subcategory-row" hidden><strong>Subcategory</strong><div class="wep-filter-buttons" id="wep-subcategory-filters"></div></div>':'')+
         (powers.length>1?'<div><strong>Power</strong><div class="wep-filter-buttons" id="wep-power-filters">'+powerButtons+'</div></div>':'')+
         (series.length>1
           ? '<div><strong>Series</strong><div class="wep-filter-buttons" id="wep-series-filters">'+seriesButtons+'</div></div>'
@@ -1193,7 +1103,7 @@
     '.wep-search-label{grid-column:2/4}.wep-search-label input{display:block;width:100%;margin-top:5px;padding:9px;border:1px solid #bbb;border-radius:7px}'+
     '.wep-smart-results{margin:13px 0;font-weight:800}'+
 
-    '.wep-smart-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;align-items:stretch}'+
+    '.wep-smart-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;align-items:stretch}'+
 
     '.wep-smart-card{display:flex;flex-direction:column;min-width:0;overflow:hidden;border:2px solid #bcc3ca;border-radius:11px;background:linear-gradient(145deg,#ffffff 0%,#fbfcfd 42%,#f1f3f5 100%);box-shadow:0 3px 10px rgba(0,0,0,.09);padding:9px}'+
 
@@ -1287,8 +1197,8 @@
 
     '.wep-smart-card[hidden]{display:none!important}'+
 
-    '@media(max-width:1100px){'+
-      '.wep-smart-grid{grid-template-columns:repeat(2,minmax(0,1fr))}'+
+    '@media(max-width:900px){'+
+      '.wep-smart-grid{grid-template-columns:1fr}'+
       '.wep-card-main{grid-template-columns:1fr}'+
       '.wep-smart-media{min-height:280px}'+
       '.wep-model-heading strong{font-size:20px;line-height:1;font-weight:900;color:#fff;letter-spacing:.15px;white-space:nowrap;text-shadow:none}'+
@@ -1298,10 +1208,6 @@
       '.wep-price-pair strong{font-size:22px}'+
     '}'+
 
-    '@media(max-width:700px){'+
-      '.wep-smart-grid{grid-template-columns:1fr}'+
-      '.wep-card-main{grid-template-columns:1fr}'+
-    '}'+
     '@media(max-width:520px){'+
       '.wep-smart-toolbar{grid-template-columns:1fr}.wep-stock-toggle,.wep-search-label{grid-column:1}'+
       '.wep-card-header{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px;margin-bottom:8px;padding:7px 9px;border:1px solid #196b34;border-radius:7px;background:#238B45;color:#202428;box-shadow:0 1px 3px rgba(0,0,0,.10)}'+'.wep-model-heading{display:block}'+
@@ -1424,10 +1330,5 @@
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',wire);
   else wire();
 })();
-
-
-
-
-
 
 
