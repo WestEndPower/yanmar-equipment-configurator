@@ -252,6 +252,7 @@ $datasets = @(
     "finance-programs",
     "bid-fleet-programs",
     "freight-rules",
+    "delivery-zones",
     "dealer-rules",
     "inventory"
 )
@@ -277,6 +278,15 @@ foreach ($dataset in $datasets) {
 
     $file =
         Join-Path $privateFolder ($dataset + ".csv")
+
+    # Delivery pricing is exported with the public workbook tables.
+    if ($dataset -eq "delivery-zones") {
+        $publicDelivery = Join-Path $PSScriptRoot "data\delivery-zones.csv"
+        if (Test-Path -LiteralPath $publicDelivery) { $file = $publicDelivery }
+        if (-not (Test-Path -LiteralPath $file)) {
+            throw "Delivery rates export is missing. Run Export CSV before syncing."
+        }
+    }
 
     if (-not (Test-Path -LiteralPath $file)) {
 
