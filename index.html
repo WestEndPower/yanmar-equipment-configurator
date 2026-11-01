@@ -4703,7 +4703,7 @@ function financeGroupColumnsForTool(tool){
 
   const columns =
     new Set([
-      'Group_ALL_STIHL'
+      `Group_ALL_${clean(tool.BrandID || tool.Brand || configuratorBrandId()).toUpperCase()}`
     ]);
 
   const values = [
@@ -4827,6 +4827,14 @@ function financeGroupColumnsForTool(tool){
   }
 
   return [...columns];
+}
+
+function financeProgramFlag(program, columnName){
+  const wanted = clean(columnName).toUpperCase();
+  const actual = Object.keys(program || {}).find(key =>
+    clean(key).toUpperCase() === wanted
+  );
+  return actual ? isTrue(program[actual]) : false;
 }
 
 function financeBulletinGroupForTool(tool){
@@ -5383,7 +5391,7 @@ const activeRebate =
     .filter(program =>
       financeProgramGroupMatches(program, t) ||
       isTrue(program.AllProducts) ||
-      groupColumns.some(column => isTrue(program[column])) ||
+      groupColumns.some(column => financeProgramFlag(program, column)) ||
       (sku && isTrue(program[sku])) ||
       (model && isTrue(program[model]))
     );
@@ -6598,7 +6606,9 @@ Brand: clean(program.BrandID),
   AllProducts:
       clean(program.FinanceBulletinGroup).toUpperCase() === 'ALL'
         ? 'T'
-        : clean(program.Group_ALL || program.Group_ALL_STIHL)
+        : (financeProgramFlag(program, 'Group_ALL') ||
+           financeProgramFlag(program, `Group_ALL_${configuratorBrandId()}`)
+            ? 'T' : 'F')
   };
 });
 
@@ -11921,7 +11931,7 @@ async function priceTagFinancePrograms(tool){
       financeProgramGroupMatches(program, tool) ||
       isTrue(program.AllProducts) ||
       financeGroupColumnsForTool(tool).some(column =>
-        isTrue(program[column])
+        financeProgramFlag(program, column)
       )
     )
     .sort(compareFinancePrograms));
@@ -15546,8 +15556,10 @@ if(
   const amount =
     Math.max(
       quoteTotal -
-      enteredCash -
-      enteredCredit,
+      Math.max(
+        enteredCash + enteredCredit,
+        minimumDownForProgram(program, quoteTotal)
+      ),
       0
     );
 
@@ -15590,13 +15602,7 @@ if(
   const groupColumns =
   financeGroupColumnsForTool(tool);
 
-  const programFlag = columnName => {
-    const wanted = clean(columnName).toUpperCase();
-    const actual = Object.keys(program || {}).find(key =>
-      clean(key).toUpperCase() === wanted
-    );
-    return actual ? isTrue(program[actual]) : false;
-  };
+  const programFlag = columnName => financeProgramFlag(program, columnName);
 
   const programBrand =
   clean(
